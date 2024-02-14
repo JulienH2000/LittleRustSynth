@@ -6,7 +6,7 @@ use cpal::{
 use core::f32::consts::PI;
 use std::sync::{Arc, Mutex};
 
-
+#[derive(Clone)]
 pub enum Waveform {
     Sine,
     Square,
@@ -14,6 +14,7 @@ pub enum Waveform {
     Triangle,
 }
 
+#[derive(Clone)]
 pub struct Oscillator {
     pub sample_rate: f32,
     pub waveform: Waveform,
@@ -38,22 +39,41 @@ impl Oscillator {
     fn calculate_sine_output_from_freq(&self, freq: f32) -> f32 {
         (self.current_sample_index * self.frequency_hz * 2.0 * PI / self.sample_rate).sin()
     }
+    fn calculate_square_output_from_freq(&self, freq: f32) -> f32 {
+        todo!()
+    }
+    fn calculate_saw_output_from_freq(&self, freq: f32) -> f32 {
+        todo!()
+    }
+    fn calculate_triangle_output_from_freq(&self, freq: f32) -> f32 {
+        todo!()
+    }
 
     fn sine_wave(&mut self) -> f32 {
         self.next_sample_index();
         self.calculate_sine_output_from_freq(self.frequency_hz)
     }
+    fn square_wave(&mut self) -> f32 {
+        self.next_sample_index();
+        self.calculate_square_output_from_freq(self.frequency_hz)
+    }
+    fn saw_wave(&mut self) -> f32 {
+        self.next_sample_index();
+        self.calculate_saw_output_from_freq(self.frequency_hz)
+    }
+    fn triangle_wave(&mut self) -> f32 {
+        self.next_sample_index();
+        self.calculate_triangle_output_from_freq(self.frequency_hz)
+    }
 
     fn tick(&mut self) -> f32 {
-        /*
+        
         match self.waveform {
             Waveform::Sine => self.sine_wave(),
             Waveform::Square => self.square_wave(),
             Waveform::Saw => self.saw_wave(),
             Waveform::Triangle => self.triangle_wave(),
         }
-        */
-        self.sine_wave()
     }
 }
 /*
@@ -65,11 +85,11 @@ fn sine (osc: &mut Oscillator, next_value: &mut dyn FnMut() -> f32) {
     };
 } */
 
-pub fn run<'a, T>(device: &cpal::Device, config: &cpal::StreamConfig, dur: u64) -> Result<(), &'static str>
+pub fn run<T>(device: &cpal::Device, config: &cpal::StreamConfig, osc: Oscillator, dur: u64) -> Result<(), &'static str>
 where
     T: SizedSample + FromSample<f32>,
 {
-    let mut osc = Oscillator::new_sine(&device, &config, 440.0);
+    let mut osc = osc.clone();
 
     let _sample_rate = config.sample_rate.0 as f32;
     let channels = config.channels as usize;
