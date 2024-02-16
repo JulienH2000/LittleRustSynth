@@ -47,6 +47,7 @@ impl Oscillator {
     fn calculate_square_output_from_freq(&self) -> f32 {
        self.amplitude * (((self.current_sample_index * self.frequency_hz * 2.0 * PI / self.sample_rate) + self.phase).sin()).signum()
     }
+    /*
     fn calculate_saw_output_from_freq(&mut self) -> f32 {
         self.next_sample_index();
         let mut output = 0.0;
@@ -58,16 +59,22 @@ impl Oscillator {
         }
         self.amplitude * (0.5 - 1f32/PI * output)
     }
+    */
+    fn calculate_saw_output_from_freq(&mut self) -> f32 {
+        self.next_sample_index();
+        let period = 1.0 / self.frequency_hz;
+        let phase = self.current_sample_index % period;
+        let value = self.amplitude * ( 2.0 * phase / period - 1.0);
+        value
+    }
+
+
     fn calculate_triangle_output_from_freq(&self) -> f32 {
         todo!()
     }
 
     fn is_multiple_of_freq_above_nyquist(&self, multiple: f32) -> bool {
         self.frequency_hz * multiple > self.sample_rate / 2.0
-        
-    }
-
-    fn calculate_from_sine(&mut self, harmonic_index_increment: i32, gain_exponent: f32){
         
     }
 
@@ -98,14 +105,7 @@ impl Oscillator {
         }
     }
 }
-/*
-fn sine (osc: &mut Oscillator, next_value: &mut dyn FnMut() -> f32) {
-    let mut clock = osc.current_sample_index;
-    let mut next_value = move || {
-        clock = (clock + 1.0) % osc.sample_rate;
-        (clock * osc.frequency_hz * 2.0 * PI / osc.sample_rate).sin()
-    };
-} */
+
 
 pub fn run<T>(device: &cpal::Device, config: &cpal::StreamConfig, osc: Oscillator, dur: u64) -> Result<(), &'static str>
 where

@@ -15,7 +15,7 @@ fn main() {
 
     //let user_input = get_user_input();
     //let user_freq = user_input.trim().parse::<f32>().unwrap();
-    let user_freq = 220f32;
+    let user_freq = 1000f32;
 
     let osc = Oscillator::new_oscillator(Waveform::Saw, &config, user_freq, 0.8f32);
 
