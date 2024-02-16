@@ -4,7 +4,8 @@ use cpal::{
     FromSample, SizedSample,
 };
 use core::f32::consts::PI;
-use std::sync::{Arc, Mutex};
+use std::process::Output;
+//use std::sync::{Arc, Mutex};
 
 #[derive(Clone)]
 pub enum Waveform {
@@ -20,15 +21,19 @@ pub struct Oscillator {
     pub waveform: Waveform,
     pub current_sample_index: f32,
     pub frequency_hz: f32,
+    pub amplitude: f32,
+    pub phase: f32
 }
 
 impl Oscillator {
-    pub fn new_sine (device: &cpal::Device, config: &cpal::StreamConfig, freq: f32) -> Oscillator {
+    pub fn new_oscillator (wave: Waveform, config: &cpal::StreamConfig, freq: f32, amp: f32) -> Oscillator {
         return Oscillator {
             sample_rate: config.sample_rate.0 as f32,
-            waveform: Waveform::Sine,
+            waveform: wave,
             current_sample_index: 0f32,
             frequency_hz: freq,
+            amplitude: amp,
+            phase: 1f32
         }
     }
 
@@ -37,16 +42,33 @@ impl Oscillator {
     }
 
     fn calculate_sine_output_from_freq(&self, freq: f32) -> f32 {
-        (self.current_sample_index * self.frequency_hz * 2.0 * PI / self.sample_rate).sin()
+        self.amplitude * ((self.current_sample_index * freq * 2.0 * PI / self.sample_rate) + self.phase).sin()
     }
-    fn calculate_square_output_from_freq(&self, freq: f32) -> f32 {
+    fn calculate_square_output_from_freq(&self) -> f32 {
+       self.amplitude * (((self.current_sample_index * self.frequency_hz * 2.0 * PI / self.sample_rate) + self.phase).sin()).signum()
+    }
+    fn calculate_saw_output_from_freq(&mut self) -> f32 {
+        self.next_sample_index();
+        let mut output = 0.0;
+        let mut k = 1f32;
+        while !self.is_multiple_of_freq_above_nyquist(k) {
+            let gain = -1f32.powf(k);
+            output += gain * ((self.calculate_sine_output_from_freq(self.frequency_hz * k)) / k);
+            k = k + 1.0;
+        }
+        self.amplitude * (0.5 - 1f32/PI * output)
+    }
+    fn calculate_triangle_output_from_freq(&self) -> f32 {
         todo!()
     }
-    fn calculate_saw_output_from_freq(&self, freq: f32) -> f32 {
-        todo!()
+
+    fn is_multiple_of_freq_above_nyquist(&self, multiple: f32) -> bool {
+        self.frequency_hz * multiple > self.sample_rate / 2.0
+        
     }
-    fn calculate_triangle_output_from_freq(&self, freq: f32) -> f32 {
-        todo!()
+
+    fn calculate_from_sine(&mut self, harmonic_index_increment: i32, gain_exponent: f32){
+        
     }
 
     fn sine_wave(&mut self) -> f32 {
@@ -55,15 +77,15 @@ impl Oscillator {
     }
     fn square_wave(&mut self) -> f32 {
         self.next_sample_index();
-        self.calculate_square_output_from_freq(self.frequency_hz)
+        self.calculate_square_output_from_freq()
     }
     fn saw_wave(&mut self) -> f32 {
-        self.next_sample_index();
-        self.calculate_saw_output_from_freq(self.frequency_hz)
+        //self.next_sample_index();
+        self.calculate_saw_output_from_freq()
     }
     fn triangle_wave(&mut self) -> f32 {
         self.next_sample_index();
-        self.calculate_triangle_output_from_freq(self.frequency_hz)
+        self.calculate_triangle_output_from_freq()
     }
 
     fn tick(&mut self) -> f32 {
