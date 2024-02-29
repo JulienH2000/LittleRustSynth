@@ -15,13 +15,14 @@ fn main() {
 
     //let user_input = get_user_input();
     //let user_freq = user_input.trim().parse::<f32>().unwrap();
-    let user_freq = 1000f32;
+    let user_freq = 440f32;
 
-    let osc = Oscillator::new_oscillator(Waveform::Saw, &config, user_freq, 0.8f32);
+    let osc = Oscillator::new_oscillator(Waveform::Square, &config, user_freq, 0.6f32);
 
     let _ = run::<f32>(&device, &config.into(), osc, 2000);
 
 }
+
 
 
 
