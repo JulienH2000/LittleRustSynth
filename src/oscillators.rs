@@ -1,6 +1,13 @@
 use core::f32::consts::PI;
 use crate::audiolib::*;
 
+#[derive(Clone)]
+pub enum Waveform {
+    Sine,
+    Square,
+    Saw,
+    Triangle,
+}
 
 #[derive(Clone)]
 pub struct Oscillator {
@@ -37,8 +44,8 @@ impl Oscillator {
         let freq = self.frequency_hz;
         let phase = self.current_sample_index * freq * 2.0 * PI / self.sample_rate;
         let period = self.sample_rate / freq;
-        let t = phase / period;
-        let half_phase = self.sample_rate / 2.0;
+        //let t = phase / period;
+        //let half_phase = self.sample_rate / 2.0;
 
         // Naive Square gen
 
