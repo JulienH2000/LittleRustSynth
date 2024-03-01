@@ -1,8 +1,10 @@
 //use cpal::traits::{DeviceTrait, HostTrait};
 
-mod audiolib;
+pub mod audiolib;
 use audio_test::get_user_input;
 use audiolib::*;
+pub mod oscillators;
+use oscillators::*;
 use cpal::traits::{DeviceTrait, HostTrait};
 
 
@@ -21,7 +23,7 @@ fn main() {
     let osc2 = Oscillator::new_oscillator(Waveform::Sine, &config, 620_f32, 0.6f32);
     let oscs = vec![osc1, osc2];
 
-    let _ = run::<f32>(&device, &config.into(), oscs, 800);
+    let _ = run::<f32>(&device, &config.into(), oscs);
 
 }
 
