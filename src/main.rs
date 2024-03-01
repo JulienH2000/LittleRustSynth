@@ -19,7 +19,7 @@ fn main() {
 
     let osc = Oscillator::new_oscillator(Waveform::Square, &config, user_freq, 0.6f32);
 
-    let _ = run::<f32>(&device, &config.into(), osc, 2000);
+    let _ = run::<f32>(&device, &config.into(), osc, 800);
 
 }
 

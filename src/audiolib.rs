@@ -44,28 +44,47 @@ impl Oscillator {
     fn calculate_sine_output_from_freq(&self, freq: f32) -> f32 {
         self.amplitude * ((self.current_sample_index * freq * 2.0 * PI / self.sample_rate) + self.phase_shift).sin()
     }
-/*
+
     fn calculate_square_output_from_freq(&self) -> f32 {
-       self.amplitude * (((self.current_sample_index * self.frequency_hz * 2.0 * PI / self.sample_rate) + self.phase).sin()).signum()
-    }
-*/
-    fn calculate_square_output_from_freq(&self) -> f32 {
-        let mut value = 0.0;
-        let phase = self.current_sample_index / (1.0/self.frequency_hz);
-        let t = phase / 2.0*PI;
-        if (phase < PI) {
-            value = 1.0;
-        } else {
-            value = -1.0;
-        }
-        value = value + self.calc_poly_blep(t);
-        value = value - self.calc_poly_blep((t + 0.5) % 1.0);
-        value
+        let mut output = 0.0;
+        let freq = self.frequency_hz;
+        let phase = self.current_sample_index * freq * 2.0 * PI / self.sample_rate;
+        let t = phase / 2.0 * PI;
+        let half_phase = self.sample_rate / 2.0;
+
+        // Naive Square gen
+
+        output = self.amplitude * ((phase + self.phase_shift).sin()).signum();
+
+        // PolyBLEP Substraction 
+
+        output = output + self.calc_poly_blep(t);
+        output = output - self.calc_poly_blep((t + 0.5) % 1.0);
+        output
        
   }
-/*
+
     fn calculate_saw_output_from_freq(&mut self) -> f32 {
-        self.next_sample_index();
+        let freq = self.frequency_hz;
+        let index = self.current_sample_index;
+        let phase = self.current_sample_index * freq * 2.0 * PI / self.sample_rate;
+        let period = self.sample_rate / freq;
+        let t = phase / period;
+
+        // Naive sawtooth gen
+        let mut output = (2.0 * (index % period) / period) - 1.0;
+
+        //let mut output = (2.0 * t) - 1.0;
+        output = output * self.amplitude;
+
+        // PolyBLEP Substraction
+
+        output = output - self.calc_poly_blep(t);
+        output
+    }
+
+/*
+Legacy Band-limited Gen 
         let mut output = 0.0;
         let mut k = 1f32;
         while !self.is_multiple_of_freq_above_nyquist(k) {
@@ -74,45 +93,9 @@ impl Oscillator {
             k = k + 1.0;
             //println!("{}", self.frequency_hz * k);
         }
-        self.amplitude * (0.5 - 1f32/PI * output) - 0.3
-    }
+        output = self.amplitude * (0.5 - 1f32/PI * output) - 0.3;
 */
-/*
-    fn calculate_saw_output_from_freq(&mut self) -> f32 {
-        self.next_sample_index();
-        let period = 1.0 / self.frequency_hz;
-        let phase = self.current_sample_index % period;
-        let value = self.amplitude * ( (2.0 * phase / period) - 1.0);
-        
-        value
-    }
-*/
-/*
-    fn calculate_saw_output_from_freq(&mut self) -> f32 {
-        let mut amp =self.amplitude;
-        let mut output = 0.0;
-        let period = 1.0 / self.frequency_hz;
-        let mut k = 1.0;
-        let mut dd;
-        let phase = self.current_sample_index / period;
-        let mut hphase = phase;
-        while !self.is_multiple_of_freq_above_nyquist(k)  {
-            dd = (phase * k * 2.0 * PI).cos();
-            output = output + (amp * dd * (hphase * 2.0 * PI).sin());
-            k = k + 1.0;
-            hphase = phase * k;
-            amp = 1.0 / k;
-        }
-        output
-    }
-*/
-    fn calculate_saw_output_from_freq(&mut self) -> f32 {
-        let phase = self.current_sample_index / (1.0/self.frequency_hz);
-        let mut value = (2.0 * phase / 2.0*PI) - 1.0;
-        value = value - self.calc_poly_blep(phase / 2.0*PI);
-        value
 
-    }
     
 
 
@@ -126,7 +109,9 @@ impl Oscillator {
     }
 
     fn calc_poly_blep(&self, t: f32) -> f32 {
+        /* t = phase / 2 PI */
         let mut t = t;
+        //let dt = self.current_sample_index / 2.0 * PI;
         let dt = self.current_sample_index / 2.0 * PI;
 
         if t < dt {
@@ -134,7 +119,7 @@ impl Oscillator {
             return t + t - t * t - 1.0;
         } else if t > 1.0 - dt {
             t = t - 1.0 / dt;
-            return t * t + t + 1.0;
+            return t * t + t + t + 1.0;
         } else {
             return 0.0;
         }
@@ -149,7 +134,7 @@ impl Oscillator {
         self.calculate_square_output_from_freq()
     }
     fn saw_wave(&mut self) -> f32 {
-        //self.next_sample_index();
+        self.next_sample_index();
         self.calculate_saw_output_from_freq()
     }
     fn triangle_wave(&mut self) -> f32 {
