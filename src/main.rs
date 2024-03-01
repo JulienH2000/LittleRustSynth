@@ -17,9 +17,11 @@ fn main() {
     //let user_freq = user_input.trim().parse::<f32>().unwrap();
     let user_freq = 440f32;
 
-    let osc = Oscillator::new_oscillator(Waveform::Square, &config, user_freq, 0.6f32);
+    let osc1 = Oscillator::new_oscillator(Waveform::Square, &config, 440_f32, 0.6f32);
+    let osc2 = Oscillator::new_oscillator(Waveform::Sine, &config, 620_f32, 0.6f32);
+    let oscs = vec![osc1, osc2];
 
-    let _ = run::<f32>(&device, &config.into(), osc, 800);
+    let _ = run::<f32>(&device, &config.into(), oscs, 800);
 
 }
 

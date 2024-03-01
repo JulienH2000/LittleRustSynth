@@ -5,7 +5,9 @@ use cpal::{
 };
 use core::f32::consts::PI;
 use std::process::Output;
-//use std::sync::{Arc, Mutex};
+use std::sync::mpsc::channel;
+use std::thread;
+use std::sync::{Arc, Mutex, MutexGuard};
 
 #[derive(Clone)]
 pub enum Waveform {
@@ -49,17 +51,18 @@ impl Oscillator {
         let mut output = 0.0;
         let freq = self.frequency_hz;
         let phase = self.current_sample_index * freq * 2.0 * PI / self.sample_rate;
-        let t = phase / 2.0 * PI;
+        let period = self.sample_rate / freq;
+        let t = phase / period;
         let half_phase = self.sample_rate / 2.0;
 
         // Naive Square gen
 
-        output = self.amplitude * ((phase + self.phase_shift).sin()).signum();
+        output = self.amplitude * ((phase).sin()).signum();
 
         // PolyBLEP Substraction 
 
-        output = output + self.calc_poly_blep(t);
-        output = output - self.calc_poly_blep((t + 0.5) % 1.0);
+        //output = output + self.calc_poly_blep(t);
+        //output = output - self.calc_poly_blep((t + 0.5) % 1.0);
         output
        
   }
@@ -154,11 +157,11 @@ Legacy Band-limited Gen
 }
 
 
-pub fn run<T>(device: &cpal::Device, config: &cpal::StreamConfig, osc: Oscillator, dur: u64) -> Result<(), &'static str>
+pub fn run<T>(device: &cpal::Device, config: &cpal::StreamConfig, oscs: Vec<Oscillator>, dur: u64) -> Result<(), &'static str>
 where
     T: SizedSample + FromSample<f32>,
 {
-    let mut osc = osc.clone();
+    let mut oscs = oscs.clone();
 
     let _sample_rate = config.sample_rate.0 as f32;
     let channels = config.channels as usize;
@@ -172,7 +175,7 @@ where
     let stream = device.build_output_stream(
         config,
         move |data: &mut [T], _: &cpal::OutputCallbackInfo| {
-            write_data(data, channels, &mut osc)
+            write_data(data, channels, &mut oscs)
         },
         err_fn,
         None,
@@ -185,14 +188,44 @@ where
 }
 
 
-pub fn write_data<T>(output: &mut [T], channels: usize, osc: &mut Oscillator)
+pub fn write_data<'a, T>(output: &mut [T], channels: usize, oscs: &mut Vec<Oscillator>)
 where
     T: Sample + FromSample<f32>,
 {
     for frame in output.chunks_mut(channels) {
-        let value: T = T::from_sample(osc.tick());
+        let value: T = T::from_sample(osc_summing(oscs));
         for sample in frame.iter_mut() {
             *sample = value;
         }
     }
+}
+
+/* multithreading sum
+pub fn osc_buffering (osc1: & mut Oscillator, osc2: & mut Oscillator) -> f32{
+        let mut osc1 = osc1.clone();
+        let mut osc2 = osc2.clone();
+        let mut osc1 = Arc::new(Mutex::new(&mut osc1));
+        let mut osc2 = Arc::new(Mutex::new(&mut osc2));
+        let buffer1 = thread::spawn(move || {
+            osc1.lock().unwrap().tick()
+        });
+        let buffer2 = thread::spawn(move || {
+            osc2.lock().unwrap().tick()
+        });
+
+        let output = buffer1.join().unwrap() + buffer2.join().unwrap();
+        output
+
+    }
+*/
+
+//single thread sum
+
+pub fn osc_summing (inputs: &mut Vec<Oscillator>) -> f32{
+    let mut buffer = 0_f32;
+    for o in inputs {
+        buffer = buffer + o.tick();
+    }
+    buffer
+
 }
