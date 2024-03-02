@@ -3,7 +3,7 @@ use std::thread;
 
 use cpal::{Sample, Stream};
 use cpal::{
-    traits::{DeviceTrait, StreamTrait},
+    traits::{DeviceTrait, StreamTrait, HostTrait},
     FromSample, SizedSample,
 };
 use crate::oscillators::*;
@@ -45,28 +45,40 @@ where
 */
 
 
-pub fn live_thread_init<'a, T> (device: &cpal::Device, config: &cpal::StreamConfig, oscs: &mut Vec<Oscillator>) 
+pub fn live_thread_init<'a, T> (oscs: Vec<&'a mut Oscillator>) 
 where
     T: SizedSample + FromSample<f32>,
 {
-    //let mut oscs = oscs;
+    // Audio Device Init
+    let host = cpal::default_host();
+    let device = host.default_output_device().expect("no output device available !!");
+    let config = device.default_output_config().unwrap().config();
+    println!("Device: {},\nUsing config: {:?}\n", device.name().expect("no name !!"), config);
+
+    // Extract some variables from Host Config
     let _sample_rate = config.sample_rate.0 as f32;
-    //let channels = config.channels as usize;
     let err_fn = |err| eprintln!("an error occurred on stream: {}", err);
+    // Write Sample Rate in the oscs
+    for osc in oscs {
+        osc.sample_rate = Some(config.sample_rate.0 as f32);
+    }
+
+    // Prepare values for the Audio Thread
+    let oscs = Arc::new(Mutex::new(oscs));
+    let channels = Arc::new(config.channels);
+    let device = Arc::new(device);
 
 
-    let mut oscs = Arc::new(Mutex::new(&mut oscs));
-    let channels = Arc::new(config.channels as usize);
-    let device = Arc::new(device.clone());
-
-
-
+    // Start Audio Thread
     thread::spawn(move || {
         loop {
+            let channels = Arc::clone(&channels);
+            let device = Arc::clone(&device);
+            let oscs = Arc::clone(&oscs);
             let stream = device.build_output_stream(
-                config,
+                &config,
                 move |data: &mut [T], _: &cpal::OutputCallbackInfo| {
-                    write_data(data, *channels, &mut oscs.lock().unwrap())
+                    write_data(data, *channels as usize, &mut oscs.lock().unwrap())
                 },
                 err_fn,
                 None,
@@ -80,7 +92,7 @@ where
 }
 
 
-pub fn write_data<'a, T>(output: &mut [T], channels: usize, oscs: &mut Vec<Oscillator>)
+pub fn write_data<'a, T>(output: &mut [T], channels: usize, oscs: &mut Vec<&mut Oscillator>)
 where
     T: Sample + FromSample<f32>,
 {
@@ -95,7 +107,7 @@ where
 
 //single thread sum
 
-pub fn osc_summing (inputs: &mut Vec<Oscillator>) -> f32{
+pub fn osc_summing (inputs: &mut Vec<&mut Oscillator>) -> f32{
     let mut buffer = 0_f32;
     for o in inputs {
         buffer = buffer + o.tick();

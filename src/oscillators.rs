@@ -11,7 +11,7 @@ pub enum Waveform {
 
 #[derive(Clone)]
 pub struct Oscillator {
-    pub sample_rate: f32,
+    pub sample_rate: Option<f32>,
     pub waveform: Waveform,
     pub current_sample_index: f32,
     pub frequency_hz: f32,
@@ -20,9 +20,9 @@ pub struct Oscillator {
 }
 
 impl Oscillator {
-    pub fn new_oscillator (wave: Waveform, config: &cpal::StreamConfig, freq: f32, amp: f32) -> Oscillator {
+    pub fn new_oscillator (wave: Waveform, freq: f32, amp: f32) -> Oscillator {
         return Oscillator {
-            sample_rate: config.sample_rate.0 as f32,
+            sample_rate: None,
             waveform: wave,
             current_sample_index: 0f32,
             frequency_hz: freq,
@@ -32,18 +32,21 @@ impl Oscillator {
     }
 
     fn next_sample_index (&mut self) {
-        self.current_sample_index = (self.current_sample_index + 1.0) % self.sample_rate;
+        let sample_rate = self.sample_rate.unwrap();
+        self.current_sample_index = (self.current_sample_index + 1.0) % sample_rate;
     }
 
     fn calculate_sine_output_from_freq(&self, freq: f32) -> f32 {
-        self.amplitude * ((self.current_sample_index * freq * 2.0 * PI / self.sample_rate) + self.phase_shift).sin()
+        let sample_rate = self.sample_rate.unwrap();
+        self.amplitude * ((self.current_sample_index * freq * 2.0 * PI / sample_rate) + self.phase_shift).sin()
     }
 
     fn calculate_square_output_from_freq(&self) -> f32 {
         let mut output = 0.0;
+        let sample_rate = self.sample_rate.unwrap();
         let freq = self.frequency_hz;
-        let phase = self.current_sample_index * freq * 2.0 * PI / self.sample_rate;
-        let period = self.sample_rate / freq;
+        let phase = self.current_sample_index * freq * 2.0 * PI / sample_rate;
+        let period = sample_rate / freq;
         //let t = phase / period;
         //let half_phase = self.sample_rate / 2.0;
 
@@ -60,10 +63,11 @@ impl Oscillator {
   }
 
     fn calculate_saw_output_from_freq(&mut self) -> f32 {
+        let sample_rate = self.sample_rate.unwrap();
         let freq = self.frequency_hz;
         let index = self.current_sample_index;
-        let phase = self.current_sample_index * freq * 2.0 * PI / self.sample_rate;
-        let period = self.sample_rate / freq;
+        let phase = self.current_sample_index * freq * 2.0 * PI / sample_rate;
+        let period = sample_rate / freq;
         let t = phase / period;
 
         // Naive sawtooth gen
@@ -99,7 +103,8 @@ Legacy Band-limited Gen
     }
 
     fn _is_multiple_of_freq_above_nyquist(&self, multiple: f32) -> bool {
-        self.frequency_hz * multiple > self.sample_rate / 2.0
+        let sample_rate = self.sample_rate.unwrap();
+        self.frequency_hz * multiple > sample_rate / 2.0
         
     }
 
