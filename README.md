@@ -1,1 +1,1 @@
-Useless project to explore audio in Rust. Based on CPAL (cross platform audio library). Current WIP : basic waveforms generation sine/square/saw/triangle.
+Useless project to explore audio in Rust. Based on CPAL (cross platform audio library). Building a simple digital synthesis software while finding out how to build it. Current feature : Sine/Square/Saw Waves, 2-Oscillator modulation, On the fly oscillator config.
