@@ -23,18 +23,19 @@ fn main() {
 
     let (tx, rx) = channel();
 
-    //let _ = run::<f32>(&device, &config.into(), oscs);
-    let stream = StreamOutput::make::<f32>(osc1, osc2, rx);
 
-    
+    // Init Host
+    let mon_host = HostConfig::new();
+    let mon_sample_rate = mon_host.config.sample_rate;
+
+    let mon_oscillateur = SourceNode::OscNode(OscNode::make_from(osc1, osc2, mon_sample_rate, rx));
+    let mut mon_stream = RenderNode::new(mon_oscillateur);
+    let ma_sortie = mon_stream.make::<f32>(mon_host);
 
     loop {
-        stream.play().unwrap();
-        let new_freq = 2000.0;
-        let new_freq = get_user_input().trim().parse().unwrap();
+        ma_sortie.play().unwrap();
+        let new_freq = get_user_input().trim().parse().unwrap_or(440.0);
         tx.send(new_freq).unwrap();
-        
-
     }
 }
 

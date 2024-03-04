@@ -35,10 +35,9 @@ dependencies = [
 
 [[package]]
 name = "audio_test"
-version = "0.1.0"
+version = "0.1.6"
 dependencies = [
  "cpal",
- "wavegen",
 ]
 
 [[package]]
@@ -754,15 +753,6 @@ name = "wasm-bindgen-shared"
 version = "0.2.91"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4f186bd2dcf04330886ce82d6f33dd75a7bfcf69ecf5763b89fcde53b6ac9838"
-
-[[package]]
-name = "wavegen"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2913201c3194677183e058a7ddb1a237a19e4e6b97275d9fe431c41a247f449c"
-dependencies = [
- "num-traits",
-]
 
 [[package]]
 name = "web-sys"
