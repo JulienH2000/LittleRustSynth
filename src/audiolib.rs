@@ -1,7 +1,7 @@
-use std::sync::{Arc, Mutex};
+use std::sync::mpsc::{Receiver, TryRecvError};
 use std::thread;
-
-use cpal::{Device, Sample, Stream, StreamConfig};
+use std::{cell::RefCell, sync::{mpsc::channel, Arc, Mutex, RwLock}};
+use cpal::{Device, Sample, SampleRate, Stream, StreamConfig};
 use cpal::{
     traits::{DeviceTrait, StreamTrait, HostTrait},
     FromSample, SizedSample,
@@ -11,103 +11,35 @@ use crate::oscillators::*;
 
 pub struct StreamOutput;
 
-
-// RUN REQUIERE MAIN THREAD SLEEP
-/*
-pub fn run<T>(device: &cpal::Device, config: &cpal::StreamConfig, oscs: Vec<Oscillator>) -> Result<(), &'static str>
-where
-    T: SizedSample + FromSample<f32>,
-{
-    let mut oscs = oscs.clone();
-
-    let _sample_rate = config.sample_rate.0 as f32;
-    let channels = config.channels as usize;
-
-    let time_at_start = std::time::Instant::now();
-    println!("Time at start: {:?}", time_at_start);
-
-    let err_fn = |err| eprintln!("an error occurred on stream: {}", err);
-
-
-    let stream = device.build_output_stream(
-        config,
-        move |data: &mut [T], _: &cpal::OutputCallbackInfo| {
-            write_data(data, channels, &mut oscs)
-        },
-        err_fn,
-        None,
-    ).unwrap();
-    stream.play().unwrap();
-
-    //std::thread::sleep(std::time::Duration::from_millis(2000));
-
-    Ok(())
-}
-
-*/
-
-
 impl StreamOutput {
-    pub fn run<'a, T> (oscs: &Vec<Oscillator>) -> Stream
+    pub fn make<'a, T> (osc1: Oscillator, osc2: Oscillator, rx: Receiver<f32>) -> Stream
     where
         T: SizedSample + FromSample<f32>,
     {
         // Init Host
         let host = HostConfig::new();
 
-        //let mut oscs = oscs.clone();
-
 
         // Extract some variables from Host Config
         let _sample_rate = host.config.sample_rate.0 as f32;
         let err_fn = |err| eprintln!("an error occurred on stream: {}", err);
         let channels = host.config.channels as usize;
-        // Write Sample Rate in the oscs
-        let mut buf:Vec<Oscillator> = vec![];
-        for osc in oscs {
-            buf.push( Oscillator{ sample_rate : Some(host.config.sample_rate.0 as f32), ..osc.clone() });
-        }
-        let mut oscs = buf;
+        
+        let mut engine = Engine::make_from(osc1,osc2, host.config.sample_rate);
 
         let stream = host.device.build_output_stream(
             &host.config,
             move |data: &mut [T], _: &cpal::OutputCallbackInfo| {
-                write_data(data, channels, &mut oscs)
+                engine.process(data, channels, &rx);
             },
             err_fn,
             None,
         ).unwrap();
-        //thread is used to hold artificially stream.play() in scope
+        //thread sleep is used to hold artificially stream.play() in scope
         //std::thread::sleep(std::time::Duration::from_millis(2000));
-
         stream
 
     }
-}
-
-
-pub fn write_data<'a, T>(output: &mut [T], channels: usize, oscs: &mut Vec<Oscillator>)
-where
-    T: Sample + FromSample<f32>,
-{
-    for frame in output.chunks_mut(channels) {
-        let value: T = T::from_sample(osc_summing(oscs));
-        for sample in frame.iter_mut() {
-            *sample = value;
-        }
-    }
-}
-
-
-//single thread sum
-
-pub fn osc_summing (inputs: &mut Vec<Oscillator>) -> f32{
-    let mut buffer = 0_f32;
-    for o in inputs {
-        buffer = buffer + o.tick();
-    }
-    buffer
-
 }
 
 pub struct HostConfig {
@@ -129,4 +61,69 @@ impl HostConfig {
             config
         }
     }
+}
+
+//#[derive(Clone)]
+pub struct Engine {
+    osc1 : Oscillator,
+    osc2 : Oscillator,
+    pub current_sample_rate: f32,
+    single_mode_flag : bool
+}
+
+impl Engine {
+
+    pub fn make_from (osc1: Oscillator, osc2: Oscillator, sample_rate: SampleRate) -> Self {
+        Engine {
+            osc1 : osc1,
+            osc2 : osc2,
+            current_sample_rate: sample_rate.0 as f32,
+            single_mode_flag : true
+        }
+    }
+
+    pub fn process<'a, T>(&mut self, output: &mut [T], channels: usize, inbox : &Receiver<f32>)
+    where
+        T: Sample + FromSample<f32>,
+    {
+        match inbox.try_recv() {
+            Ok(msg) => self.check_inbox(msg),
+            Err(TryRecvError::Empty) => {} // nothing new
+            Err(TryRecvError::Disconnected) => panic!("inbox Disconnected !!"),
+        }
+        for frame in output.chunks_mut(channels) {
+            let value: T = T::from_sample(
+                self.tick()
+            );
+            for sample in frame.iter_mut() {
+                *sample = value;
+            }
+        }
+    }
+
+    pub fn tick(&mut self) -> f32 {
+        let current_sample_rate = self.current_sample_rate; 
+        let tick_waveform = |osc: &mut Oscillator| 
+            match osc.waveform {
+                Waveform::Sine => osc.sine_wave(&current_sample_rate),
+                Waveform::Square => osc.square_wave(&current_sample_rate),
+                Waveform::Saw => osc.saw_wave(&current_sample_rate),
+                Waveform::Triangle => osc.triangle_wave(&current_sample_rate),
+        };
+        
+        let osc1_sample = tick_waveform(&mut self.osc1);
+        let osc2_sample = tick_waveform(&mut self.osc2);
+
+        if self.single_mode_flag == true {
+            return osc1_sample
+        } else {
+            return osc1_sample * osc2_sample;
+        }
+
+    }
+
+    fn check_inbox (&mut self, msg: f32) {
+        self.osc1.frequency_hz = msg;
+    }
+
 }

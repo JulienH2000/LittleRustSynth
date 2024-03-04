@@ -1,7 +1,9 @@
 use core::f32::consts::PI;
-use crate::audiolib::*;
+use cpal::SampleRate;
 
-#[derive(Clone)]
+use crate::{audiolib::*};
+
+#[derive(Copy, Clone)]
 pub enum Waveform {
     Sine,
     Square,
@@ -9,9 +11,8 @@ pub enum Waveform {
     Triangle,
 }
 
-#[derive(Clone)]
+#[derive(Copy, Clone)]
 pub struct Oscillator {
-    pub sample_rate: Option<f32>,
     pub waveform: Waveform,
     pub current_sample_index: f32,
     pub frequency_hz: f32,
@@ -22,7 +23,6 @@ pub struct Oscillator {
 impl Oscillator {
     pub fn new_oscillator (wave: Waveform, freq: f32, amp: f32) -> Oscillator {
         return Oscillator {
-            sample_rate: None,
             waveform: wave,
             current_sample_index: 0f32,
             frequency_hz: freq,
@@ -31,19 +31,19 @@ impl Oscillator {
         }
     }
 
-    fn next_sample_index (&mut self) {
-        let sample_rate = self.sample_rate.unwrap();
+    fn next_sample_index (&mut self, engine_sample_rate: &f32) {
+        let sample_rate = engine_sample_rate;
         self.current_sample_index = (self.current_sample_index + 1.0) % sample_rate;
     }
 
-    fn calculate_sine_output_from_freq(&self, freq: f32) -> f32 {
-        let sample_rate = self.sample_rate.unwrap();
+    fn calculate_sine_output_from_freq(&self, freq: f32, engine_sample_rate: &f32) -> f32 {
+        let sample_rate = engine_sample_rate;
         self.amplitude * ((self.current_sample_index * freq * 2.0 * PI / sample_rate) + self.phase_shift).sin()
     }
 
-    fn calculate_square_output_from_freq(&self) -> f32 {
+    fn calculate_square_output_from_freq(&self, engine_sample_rate: &f32) -> f32 {
         let mut output = 0.0;
-        let sample_rate = self.sample_rate.unwrap();
+        let sample_rate = engine_sample_rate;
         let freq = self.frequency_hz;
         let phase = self.current_sample_index * freq * 2.0 * PI / sample_rate;
         let period = sample_rate / freq;
@@ -62,8 +62,8 @@ impl Oscillator {
        
   }
 
-    fn calculate_saw_output_from_freq(&mut self) -> f32 {
-        let sample_rate = self.sample_rate.unwrap();
+    fn calculate_saw_output_from_freq(&mut self, engine_sample_rate: &f32) -> f32 {
+        let sample_rate = engine_sample_rate;
         let freq = self.frequency_hz;
         let index = self.current_sample_index;
         let phase = self.current_sample_index * freq * 2.0 * PI / sample_rate;
@@ -82,28 +82,12 @@ impl Oscillator {
         output
     }
 
-/*
-Legacy Band-limited Gen 
-        let mut output = 0.0;
-        let mut k = 1f32;
-        while !self.is_multiple_of_freq_above_nyquist(k) {
-            let gain = -1f32.powf(k);
-            output += gain * ((self.calculate_sine_output_from_freq(self.frequency_hz * k)) / k);
-            k = k + 1.0;
-            //println!("{}", self.frequency_hz * k);
-        }
-        output = self.amplitude * (0.5 - 1f32/PI * output) - 0.3;
-*/
-
-    
-
-
     fn calculate_triangle_output_from_freq(&self) -> f32 {
         todo!()
     }
 
-    fn _is_multiple_of_freq_above_nyquist(&self, multiple: f32) -> bool {
-        let sample_rate = self.sample_rate.unwrap();
+    fn _is_multiple_of_freq_above_nyquist(&self, multiple: f32, engine_sample_rate: &f32) -> bool {
+        let sample_rate = engine_sample_rate;
         self.frequency_hz * multiple > sample_rate / 2.0
         
     }
@@ -125,30 +109,24 @@ Legacy Band-limited Gen
         }
     }
 
-    fn sine_wave(&mut self) -> f32 {
-        self.next_sample_index();
-        self.calculate_sine_output_from_freq(self.frequency_hz)
+    pub fn sine_wave(&mut self, engine_sample_rate: &f32) -> f32 {
+        self.next_sample_index(engine_sample_rate);
+        self.calculate_sine_output_from_freq(self.frequency_hz, engine_sample_rate)
     }
-    fn square_wave(&mut self) -> f32 {
-        self.next_sample_index();
-        self.calculate_square_output_from_freq()
+    pub fn square_wave(&mut self, engine_sample_rate: &f32) -> f32 {
+        self.next_sample_index(engine_sample_rate);
+        self.calculate_square_output_from_freq(engine_sample_rate)
     }
-    fn saw_wave(&mut self) -> f32 {
-        self.next_sample_index();
-        self.calculate_saw_output_from_freq()
+    pub fn saw_wave(&mut self, engine_sample_rate: &f32) -> f32 {
+        self.next_sample_index(engine_sample_rate);
+        self.calculate_saw_output_from_freq(engine_sample_rate)
     }
-    fn triangle_wave(&mut self) -> f32 {
-        self.next_sample_index();
+    pub fn triangle_wave(&mut self, engine_sample_rate: &f32) -> f32 {
+        self.next_sample_index(engine_sample_rate);
         self.calculate_triangle_output_from_freq()
     }
 
-    pub fn tick(&mut self) -> f32 {
-        
-        match self.waveform {
-            Waveform::Sine => self.sine_wave(),
-            Waveform::Square => self.square_wave(),
-            Waveform::Saw => self.saw_wave(),
-            Waveform::Triangle => self.triangle_wave(),
-        }
+    pub fn update_freq(&mut self, nf: f32) {
+        self.frequency_hz = nf;
     }
 }
