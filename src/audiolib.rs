@@ -71,7 +71,7 @@ impl RenderNode {
                 for frame in data.chunks_mut(channels) {
                     let value: T = T::from_sample(
                         match &mut input_node {
-                            SourceNode::OscNode(osc) => osc.process::<T>(channels),
+                            SourceNode::OscNode(osc) => osc.process::<T>(),
                             _ => 0.0  
                         }
                     );
@@ -118,13 +118,13 @@ pub struct OscNode {
     osc2 : Oscillator,
     pub current_sample_rate: f32,
     single_mode_flag : bool,
-    inbox : Arc::<Mutex<Option<Receiver<f32>>>>
+    inbox : Arc::<Mutex<Option<Receiver<String>>>>
 }
 
 impl OscNode {
 
 
-    pub fn make_from (osc1: Oscillator, osc2: Oscillator, sample_rate: SampleRate, inbox: Receiver<f32>) -> Self {
+    pub fn make_from (osc1: Oscillator, osc2: Oscillator, sample_rate: SampleRate, inbox: Receiver<String>) -> Self {
         OscNode {
             osc1 : osc1,
             osc2 : osc2,
@@ -135,7 +135,7 @@ impl OscNode {
     }
 
     // Ocsillator to buffer 
-    pub fn process<'a, T>(&'a mut self, channels: usize) -> f32
+    pub fn process<'a, T>(&'a mut self) -> f32
     where
         T: Sample + FromSample<f32>,
     {
@@ -181,8 +181,35 @@ impl OscNode {
 
     }
 
-    fn check_inbox (&mut self, msg: f32) {
-        self.osc1.frequency_hz = msg;
+    fn check_inbox (&mut self, msg: String) {
+        /*
+        Message syntaxe :
+        parameter-value
+        */
+        let args: Vec<&str> = msg.trim().split('-').collect();
+
+        let str_to_waveform = |arg: &str| match arg.to_lowercase().as_str() {
+            "sine" => Waveform::Sine,
+            "square" => Waveform::Square,
+            "saw" => Waveform::Saw,
+            "triangle" => Waveform::Triangle,
+            _ => Waveform::Sine
+        };
+        let str_to_bool = |arg: &str| match arg.to_lowercase().as_str() {
+            "true" => true,
+            "false" => false,
+            _ => false,
+        };
+
+        match args[0] {
+            "osc1freq" => self.osc1.frequency_hz = args[1].parse::<f32>().unwrap(),
+            "osc1type" => self.osc1.waveform = str_to_waveform(args[1]),
+            "osc2freq" => self.osc2.frequency_hz = args[1].parse::<f32>().unwrap(),
+            "osc2type" => self.osc2.waveform = str_to_waveform(args[1]),
+            "singlemode" => self.single_mode_flag = str_to_bool(args[1]),
+            _ => ()
+        }
+        
     }
 
 }

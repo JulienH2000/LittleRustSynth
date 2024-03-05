@@ -16,7 +16,7 @@ fn main() {
     let user_freq = 440f32;
 
     let mut osc1 = Oscillator::new_oscillator(Waveform::Sine, 440_f32, 0.6f32);
-    let mut osc2 = Oscillator::new_oscillator(Waveform::Sine, 620_f32, 0.6f32);
+    let mut osc2 = Oscillator::new_oscillator(Waveform::Square, 620_f32, 0.6f32);
     //let mut oscs = vec![osc1];
 
     //live_thread_init::<f32>(oscs);
@@ -34,8 +34,8 @@ fn main() {
 
     loop {
         ma_sortie.play().unwrap();
-        let new_freq = get_user_input().trim().parse().unwrap_or(440.0);
-        tx.send(new_freq).unwrap();
+        let message = get_user_input();
+        tx.send(message).unwrap();
     }
 }
 
