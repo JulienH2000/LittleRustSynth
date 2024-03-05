@@ -8,43 +8,9 @@ use cpal::{
 };
 use crate::oscillators::*;
 
-
-pub struct StreamOutput;
-
-impl StreamOutput {
-    pub fn make<'a, T> (osc1: Oscillator, osc2: Oscillator, rx: Receiver<f32>) -> Stream
-    where
-        T: SizedSample + FromSample<f32>,
-    {
-        // Init Host
-        let host = HostConfig::new();
-
-
-        // Extract some variables from Host Config
-        let _sample_rate = host.config.sample_rate.0 as f32;
-        let err_fn = |err| eprintln!("an error occurred on stream: {}", err);
-        let channels = host.config.channels as usize;
-        
-        let mut engine = Engine::make_from(osc1,osc2, host.config.sample_rate);
-
-        let stream = host.device.build_output_stream(
-            &host.config,
-            move |data: &mut [T], _: &cpal::OutputCallbackInfo| {
-                engine.process(data, channels, &rx);
-            },
-            err_fn,
-            None,
-        ).unwrap();
-        //thread sleep is used to hold artificially stream.play() in scope
-        //std::thread::sleep(std::time::Duration::from_millis(2000));
-        stream
-
-    }
-}
-
 pub struct HostConfig {
-    device: Device,
-    config: StreamConfig
+    pub device: Device,
+    pub config: StreamConfig
 }
 
 impl HostConfig {
@@ -63,34 +29,125 @@ impl HostConfig {
     }
 }
 
-//#[derive(Clone)]
-pub struct Engine {
-    osc1 : Oscillator,
-    osc2 : Oscillator,
-    pub current_sample_rate: f32,
-    single_mode_flag : bool
+#[derive(Clone)]
+pub enum SourceNode {
+    OscNode(OscNode),
+    AudioNode
 }
 
-impl Engine {
+pub struct RenderNode {
+    input_node : SourceNode,
+    host : Arc<Mutex<Option<HostConfig>>>
+}
 
-    pub fn make_from (osc1: Oscillator, osc2: Oscillator, sample_rate: SampleRate) -> Self {
-        Engine {
-            osc1 : osc1,
-            osc2 : osc2,
-            current_sample_rate: sample_rate.0 as f32,
-            single_mode_flag : true
+impl RenderNode {
+
+    pub fn new (source : SourceNode, host: HostConfig) -> Self {
+        return RenderNode {
+            input_node : source,
+            host : Arc::new(Mutex::new(Some(host)))
         }
     }
 
-    pub fn process<'a, T>(&mut self, output: &mut [T], channels: usize, inbox : &Receiver<f32>)
+    pub fn make<'a, T> (&'a mut self) -> Stream
+    where
+        T: SizedSample + FromSample<f32>,
+    {
+        let host = Arc::clone(&self.host);
+        let mut host = host.lock().unwrap();
+        let host = host.as_mut().unwrap();
+
+
+        // Extract some variables from Host Config
+        let _sample_rate = host.config.sample_rate.0 as f32;
+        let err_fn = |err| eprintln!("an error occurred on stream: {}", err);
+        let channels = host.config.channels as usize;
+
+        let mut input_node = self.input_node.clone();
+        let stream = {
+            host.device.build_output_stream(
+            &host.config,
+            move |data: &mut [T], _: &cpal::OutputCallbackInfo| {
+                for frame in data.chunks_mut(channels) {
+                    let value: T = T::from_sample(
+                        match &mut input_node {
+                            SourceNode::OscNode(osc) => osc.process::<T>(),
+                            _ => 0.0  
+                        }
+                    );
+                    for sample in frame.iter_mut() {
+                        *sample = value;
+                    }
+                }
+                
+            },
+            err_fn,
+            None,
+        ).unwrap()
+    };
+
+        //thread sleep is used to hold artificially stream.play() in scope
+        //std::thread::sleep(std::time::Duration::from_millis(2000));   
+    stream
+    }
+
+    /*
+    // Buffers from OscNode to output
+    pub fn run<'a, T>(&'a mut self, output: &'a mut [T], channels: usize)
     where
         T: Sample + FromSample<f32>,
     {
-        match inbox.try_recv() {
-            Ok(msg) => self.check_inbox(msg),
-            Err(TryRecvError::Empty) => {} // nothing new
-            Err(TryRecvError::Disconnected) => panic!("inbox Disconnected !!"),
+        for frame in output.chunks_mut(channels) {
+            let value: T = T::from_sample(
+                match &mut self.input_node {
+                    SourceNode::OscNode(osc) => osc.process::<T>(channels),
+                    _ => 0.0  
+                }
+            );
+            for sample in frame.iter_mut() {
+                *sample = value;
+            }
         }
+    }
+    */
+}
+
+#[derive(Clone)]
+pub struct OscNode {
+    osc1 : Oscillator,
+    osc2 : Oscillator,
+    pub current_sample_rate: f32,
+    single_mode_flag : bool,
+    inbox : Arc::<Mutex<Option<Receiver<String>>>>
+}
+
+impl OscNode {
+
+
+    pub fn make_from (osc1: Oscillator, osc2: Oscillator, sample_rate: SampleRate, inbox: Receiver<String>) -> Self {
+        OscNode {
+            osc1 : osc1,
+            osc2 : osc2,
+            current_sample_rate: sample_rate.0 as f32,
+            single_mode_flag : true,
+            inbox : Arc::new(Mutex::new(Some(inbox)))
+        }
+    }
+
+    // Ocsillator to buffer 
+    pub fn process<'a, T>(&'a mut self) -> f32
+    where
+        T: Sample + FromSample<f32>,
+    {
+        // ça c'est de la method de fumeur de mauvais shit 
+        let inbox = Arc::clone(&self.inbox);
+        let mut inbox = inbox.lock().unwrap();
+        match inbox.as_mut().unwrap().try_recv() {
+            Ok(msg) => self.check_inbox(msg),
+            Err(TryRecvError::Empty) => {},
+            Err(TryRecvError::Disconnected) => {panic!("inbox Disconnected !!")},
+        }
+        /*
         for frame in output.chunks_mut(channels) {
             let value: T = T::from_sample(
                 self.tick()
@@ -99,6 +156,8 @@ impl Engine {
                 *sample = value;
             }
         }
+        */
+        return self.tick();
     }
 
     pub fn tick(&mut self) -> f32 {
@@ -122,8 +181,35 @@ impl Engine {
 
     }
 
-    fn check_inbox (&mut self, msg: f32) {
-        self.osc1.frequency_hz = msg;
+    fn check_inbox (&mut self, msg: String) {
+        /*
+        Message syntaxe :
+        parameter-value
+        */
+        let args: Vec<&str> = msg.trim().split('-').collect();
+
+        let str_to_waveform = |arg: &str| match arg.to_lowercase().as_str() {
+            "sine" => Waveform::Sine,
+            "square" => Waveform::Square,
+            "saw" => Waveform::Saw,
+            "triangle" => Waveform::Triangle,
+            _ => Waveform::Sine
+        };
+        let str_to_bool = |arg: &str| match arg.to_lowercase().as_str() {
+            "true" => true,
+            "false" => false,
+            _ => false,
+        };
+
+        match args[0] {
+            "osc1freq" => self.osc1.frequency_hz = args[1].parse::<f32>().unwrap(),
+            "osc1type" => self.osc1.waveform = str_to_waveform(args[1]),
+            "osc2freq" => self.osc2.frequency_hz = args[1].parse::<f32>().unwrap(),
+            "osc2type" => self.osc2.waveform = str_to_waveform(args[1]),
+            "singlemode" => self.single_mode_flag = str_to_bool(args[1]),
+            _ => ()
+        }
+        
     }
 
 }
