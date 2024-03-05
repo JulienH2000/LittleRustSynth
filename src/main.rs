@@ -29,8 +29,8 @@ fn main() {
     let mon_sample_rate = mon_host.config.sample_rate;
 
     let mon_oscillateur = SourceNode::OscNode(OscNode::make_from(osc1, osc2, mon_sample_rate, rx));
-    let mut mon_stream = RenderNode::new(mon_oscillateur);
-    let ma_sortie = mon_stream.make::<f32>(mon_host);
+    let mut mon_stream = RenderNode::new(mon_oscillateur, mon_host);
+    let ma_sortie = mon_stream.make::<f32>();
 
     loop {
         ma_sortie.play().unwrap();

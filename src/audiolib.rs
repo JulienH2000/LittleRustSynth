@@ -29,41 +29,57 @@ impl HostConfig {
     }
 }
 
+#[derive(Clone)]
 pub enum SourceNode {
     OscNode(OscNode),
     AudioNode
 }
 
 pub struct RenderNode {
-    input_node : SourceNode
+    input_node : SourceNode,
+    host : Arc<Mutex<Option<HostConfig>>>
 }
 
 impl RenderNode {
 
-    pub fn new (source : SourceNode) -> Self {
+    pub fn new (source : SourceNode, host: HostConfig) -> Self {
         return RenderNode {
-            input_node : source
+            input_node : source,
+            host : Arc::new(Mutex::new(Some(host)))
         }
     }
 
-    pub fn make<'a, T> (&'a mut self, host: HostConfig) -> Stream
+    pub fn make<'a, T> (&'a mut self) -> Stream
     where
         T: SizedSample + FromSample<f32>,
     {
+        let host = Arc::clone(&self.host);
+        let mut host = host.lock().unwrap();
+        let host = host.as_mut().unwrap();
+
 
         // Extract some variables from Host Config
         let _sample_rate = host.config.sample_rate.0 as f32;
         let err_fn = |err| eprintln!("an error occurred on stream: {}", err);
         let channels = host.config.channels as usize;
 
-        let this = Arc::new(RwLock::new(self));
-
+        let mut input_node = self.input_node.clone();
         let stream = {
             host.device.build_output_stream(
             &host.config,
             move |data: &mut [T], _: &cpal::OutputCallbackInfo| {
-                let mut this = this.write().unwrap();
-                this.run(data, channels);
+                for frame in data.chunks_mut(channels) {
+                    let value: T = T::from_sample(
+                        match &mut input_node {
+                            SourceNode::OscNode(osc) => osc.process::<T>(channels),
+                            _ => 0.0  
+                        }
+                    );
+                    for sample in frame.iter_mut() {
+                        *sample = value;
+                    }
+                }
+                
             },
             err_fn,
             None,
@@ -71,12 +87,11 @@ impl RenderNode {
     };
 
         //thread sleep is used to hold artificially stream.play() in scope
-        //std::thread::sleep(std::time::Duration::from_millis(2000));
-
-        return stream;
-
+        //std::thread::sleep(std::time::Duration::from_millis(2000));   
+    stream
     }
 
+    /*
     // Buffers from OscNode to output
     pub fn run<'a, T>(&'a mut self, output: &'a mut [T], channels: usize)
     where
@@ -94,9 +109,10 @@ impl RenderNode {
             }
         }
     }
+    */
 }
 
-//#[derive(Clone)]
+#[derive(Clone)]
 pub struct OscNode {
     osc1 : Oscillator,
     osc2 : Oscillator,
