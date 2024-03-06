@@ -1,12 +1,10 @@
-use std::sync::mpsc::{Receiver, TryRecvError};
-use std::thread;
-use std::{cell::RefCell, sync::{mpsc::channel, Arc, Mutex, RwLock}};
-use cpal::{Device, Sample, SampleRate, Stream, StreamConfig};
+use std::sync::{Arc, Mutex};
+use cpal::{Device, Stream, StreamConfig};
 use cpal::{
-    traits::{DeviceTrait, StreamTrait, HostTrait},
+    traits::{DeviceTrait, HostTrait},
     FromSample, SizedSample,
 };
-use crate::oscillators::*;
+use crate::dsp::oscillators::*;
 
 pub struct HostConfig {
     pub device: Device,
@@ -31,19 +29,19 @@ impl HostConfig {
 
 #[derive(Clone)]
 pub enum SourceNode {
-    OscNode(OscNode),
+    OscNode(Oscillator),
     AudioNode
 }
 
-pub struct RenderNode {
+pub struct ProcessNode {
     input_node : SourceNode,
     host : Arc<Mutex<Option<HostConfig>>>
 }
 
-impl RenderNode {
+impl ProcessNode {
 
     pub fn new (source : SourceNode, host: HostConfig) -> Self {
-        return RenderNode {
+        return ProcessNode {
             input_node : source,
             host : Arc::new(Mutex::new(Some(host)))
         }
@@ -88,128 +86,7 @@ impl RenderNode {
 
         //thread sleep is used to hold artificially stream.play() in scope
         //std::thread::sleep(std::time::Duration::from_millis(2000));   
+
     stream
     }
-
-    /*
-    // Buffers from OscNode to output
-    pub fn run<'a, T>(&'a mut self, output: &'a mut [T], channels: usize)
-    where
-        T: Sample + FromSample<f32>,
-    {
-        for frame in output.chunks_mut(channels) {
-            let value: T = T::from_sample(
-                match &mut self.input_node {
-                    SourceNode::OscNode(osc) => osc.process::<T>(channels),
-                    _ => 0.0  
-                }
-            );
-            for sample in frame.iter_mut() {
-                *sample = value;
-            }
-        }
-    }
-    */
-}
-
-#[derive(Clone)]
-pub struct OscNode {
-    osc1 : Oscillator,
-    osc2 : Oscillator,
-    pub current_sample_rate: f32,
-    single_mode_flag : bool,
-    inbox : Arc::<Mutex<Option<Receiver<String>>>>
-}
-
-impl OscNode {
-
-
-    pub fn make_from (osc1: Oscillator, osc2: Oscillator, sample_rate: SampleRate, inbox: Receiver<String>) -> Self {
-        OscNode {
-            osc1 : osc1,
-            osc2 : osc2,
-            current_sample_rate: sample_rate.0 as f32,
-            single_mode_flag : true,
-            inbox : Arc::new(Mutex::new(Some(inbox)))
-        }
-    }
-
-    // Ocsillator to buffer 
-    pub fn process<'a, T>(&'a mut self) -> f32
-    where
-        T: Sample + FromSample<f32>,
-    {
-        // ça c'est de la method de fumeur de mauvais shit 
-        let inbox = Arc::clone(&self.inbox);
-        let mut inbox = inbox.lock().unwrap();
-        match inbox.as_mut().unwrap().try_recv() {
-            Ok(msg) => self.check_inbox(msg),
-            Err(TryRecvError::Empty) => {},
-            Err(TryRecvError::Disconnected) => {panic!("inbox Disconnected !!")},
-        }
-        /*
-        for frame in output.chunks_mut(channels) {
-            let value: T = T::from_sample(
-                self.tick()
-            );
-            for sample in frame.iter_mut() {
-                *sample = value;
-            }
-        }
-        */
-        return self.tick();
-    }
-
-    pub fn tick(&mut self) -> f32 {
-        let current_sample_rate = self.current_sample_rate; 
-        let tick_waveform = |osc: &mut Oscillator| 
-            match osc.waveform {
-                Waveform::Sine => osc.sine_wave(&current_sample_rate),
-                Waveform::Square => osc.square_wave(&current_sample_rate),
-                Waveform::Saw => osc.saw_wave(&current_sample_rate),
-                Waveform::Triangle => osc.triangle_wave(&current_sample_rate),
-        };
-        
-        let osc1_sample = tick_waveform(&mut self.osc1);
-        let osc2_sample = tick_waveform(&mut self.osc2);
-
-        if self.single_mode_flag == true {
-            return osc1_sample
-        } else {
-            return osc1_sample * osc2_sample;
-        }
-
-    }
-
-    fn check_inbox (&mut self, msg: String) {
-        /*
-        Message syntaxe :
-        parameter-value
-        */
-        let args: Vec<&str> = msg.trim().split('-').collect();
-
-        let str_to_waveform = |arg: &str| match arg.to_lowercase().as_str() {
-            "sine" => Waveform::Sine,
-            "square" => Waveform::Square,
-            "saw" => Waveform::Saw,
-            "triangle" => Waveform::Triangle,
-            _ => Waveform::Sine
-        };
-        let str_to_bool = |arg: &str| match arg.to_lowercase().as_str() {
-            "true" => true,
-            "false" => false,
-            _ => false,
-        };
-
-        match args[0] {
-            "osc1freq" => self.osc1.frequency_hz = args[1].parse::<f32>().unwrap(),
-            "osc1type" => self.osc1.waveform = str_to_waveform(args[1]),
-            "osc2freq" => self.osc2.frequency_hz = args[1].parse::<f32>().unwrap(),
-            "osc2type" => self.osc2.waveform = str_to_waveform(args[1]),
-            "singlemode" => self.single_mode_flag = str_to_bool(args[1]),
-            _ => ()
-        }
-        
-    }
-
 }
