@@ -1,9 +1,11 @@
+use core::fmt;
 use std::sync::{Arc, Mutex};
 use cpal::{Device, Stream, StreamConfig};
 use cpal::{
     traits::{DeviceTrait, HostTrait},
     FromSample, SizedSample,
 };
+use cpal::{Sample, SampleRate};
 use crate::dsp::oscillators::*;
 
 pub struct HostConfig {
@@ -28,19 +30,29 @@ impl HostConfig {
 }
 
 #[derive(Clone)]
-pub enum SourceNode {
+pub enum Nodes {
     OscNode(Oscillator),
-    AudioNode
+    ProcessNode
 }
 
+impl fmt::Display for Nodes {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::OscNode(osc) => write!(f, "OscNode"),
+            Self::ProcessNode => write!(f, "ProcessNode")
+        }
+    }
+}
+
+
 pub struct ProcessNode {
-    input_node : SourceNode,
+    input_node : Nodes,
     host : Arc<Mutex<Option<HostConfig>>>
 }
 
 impl ProcessNode {
 
-    pub fn new (source : SourceNode, host: HostConfig) -> Self {
+    pub fn new (source : Nodes, host: HostConfig) -> Self {
         return ProcessNode {
             input_node : source,
             host : Arc::new(Mutex::new(Some(host)))
@@ -69,7 +81,7 @@ impl ProcessNode {
                 for frame in data.chunks_mut(channels) {
                     let value: T = T::from_sample(
                         match &mut input_node {
-                            SourceNode::OscNode(osc) => osc.process::<T>(),
+                            Nodes::OscNode(osc) => osc.process::<T>(),
                             _ => 0.0  
                         }
                     );

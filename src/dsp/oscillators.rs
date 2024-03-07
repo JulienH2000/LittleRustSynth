@@ -28,11 +28,19 @@ pub struct Oscillator {
 
 impl Oscillator {
     pub fn new (wave: Waveform, 
-                sample_rate: SampleRate, 
-                inbox: Receiver<String>, 
+                sample_rate: Option<SampleRate>, 
+                inbox: Option<Receiver<String>>, 
                 freq: f32, 
                 amp: f32
                 ) -> Oscillator {
+        let sample_rate = match sample_rate {
+            Some(sr) => sr.0 as f32 ,
+            None => 48000_f32
+        };
+        let inbox = match inbox {
+            Some(ibx) => Arc::new(Mutex::new(Some(ibx))),
+            None => Arc::new(Mutex::new(None))
+        };
         return Oscillator {
             waveform: wave,
             current_sample_index: 0f32,
@@ -40,8 +48,23 @@ impl Oscillator {
             frequency_hz: freq,
             amplitude: amp,
             phase_shift: 1f32,
-            current_sample_rate: sample_rate.0 as f32,
-            inbox : Arc::new(Mutex::new(Some(inbox))),
+            current_sample_rate: sample_rate,
+            inbox : inbox,
+            phase : 0.0,
+            phase_incr: 0.0
+        }
+    }
+
+    pub fn new_empty () -> Oscillator {
+        return Oscillator {
+            waveform: Waveform::Sine,
+            current_sample_index: 0f32,
+            last_sample: 0f32,
+            frequency_hz: 440.0,
+            amplitude: 0.0,
+            phase_shift: 1f32,
+            current_sample_rate: 44100.0,
+            inbox : Arc::new(Mutex::new(None)),
             phase : 0.0,
             phase_incr: 0.0
         }
@@ -62,6 +85,14 @@ impl Oscillator {
             Err(TryRecvError::Disconnected) => {panic!("inbox Disconnected !!")},
         }
         return self.next_sample();
+    }
+
+    pub fn context (&self, sr: SampleRate, inbox : Option<Receiver<String>>) -> Self {
+        return Oscillator {
+            current_sample_rate : sr.0 as f32,
+            inbox : Arc::new(Mutex::new(inbox)),
+            ..*self
+        }
     }
 
     pub fn next_sample(&mut self) -> f32 {
