@@ -6,6 +6,7 @@ use crate::dsp::oscillators::*;
 
 
 
+//simple user input reading
 pub fn get_user_input() -> String {
     let mut user_input = String::new();
             io::stdin()
@@ -14,13 +15,14 @@ pub fn get_user_input() -> String {
     user_input
 }
 
+//User command interpreter
 pub fn get_user_command (msg: String, tree: &mut NodeTree) {
     /*
     Syntaxe :
-    Invoke Node1>Node2>Node3>....
-    See
-    Destroy
-    Edit Node
+    Invoke Node1>Node2>Node3>.... !Working
+    See !Working
+    Destroy !Not Working
+    Edit Node !todo
     */
 
     //check command
@@ -33,23 +35,8 @@ pub fn get_user_command (msg: String, tree: &mut NodeTree) {
     };
 }
 
+//Currently Osc::new, future use
 pub fn get_user_osc () -> Oscillator {
-    /*
-    println!("Set parameter to invoke oscillator !\nType,Frequency,Amplitude");
-    let input = get_user_input();
-    let args: Vec<&str> = input.trim().split(',').collect();
-
-    let str_to_waveform = |arg: &str| match arg.to_lowercase().as_str() {
-        "sine" => Waveform::Sine,
-        "square" => Waveform::Square,
-        "saw" => Waveform::Saw,
-        "triangle" => Waveform::Triangle,
-        _ => Waveform::Sine
-    };
-    let wavetype = str_to_waveform(args[0]);
-    let freq = args[1].parse::<f32>().unwrap();
-    let amp = args[2].parse::<f32>().unwrap();
-    */
     let osc = Oscillator::new_empty();
     println!("oscillator set !");
     return osc;
@@ -57,6 +44,7 @@ pub fn get_user_osc () -> Oscillator {
 }
 
 
+//struct to fill with your nodes
 #[derive(Clone)]
 pub struct NodeTree {
    pub  nodes : Vec<Nodes>
@@ -68,6 +56,7 @@ impl NodeTree {
         return NodeTree { nodes : vec![] };
     }
 
+    // Gets your message, translate your nodes to Nodes enum type, fills a NodeTree instance
     fn invoke (&mut self, nodes: &str) {
         println!("Building your tree...");
         self.nodes = vec![];
@@ -86,6 +75,7 @@ impl NodeTree {
         }
     }
 
+    // Just display a NodeTree, in order
     pub fn see (&self) {
         let nodes = &self.nodes;
         for node in nodes {
@@ -93,14 +83,18 @@ impl NodeTree {
         }
     }
 
+    // Destroy your tree, 
+    // not working due to compile ignoring empty tree if a previous working stream exists
     pub fn destroy (&mut self) {
         *self = NodeTree::new();
     }
 
+    // Compile your tree into a cpal::Stream, return a Option, to return None if your tree is empty
     pub fn compile (&mut self, host: Arc<Mutex<Option<HostConfig>>>, inbox: Arc<Mutex<Option<Receiver<String>>>> ) -> Option<Stream> {
 
         let mut buf: Vec<Nodes> = vec![];
 
+        // Supports here 2 types of Node
         for node in &self.nodes {
             match node {
                 Nodes::OscNode(osc) => match osc {
@@ -108,18 +102,19 @@ impl NodeTree {
                     None => buf.push(Nodes::OscNode(Some(get_user_osc().context(host.clone(), inbox.clone()))))
                 },
                 Nodes::ProcessNode => {buf.push(Nodes::ProcessNode); break;},
-                _ => panic!("Invalid Node !!"),
+                _ => panic!("Invalid Node !!"), // No idea why this is unreachable..
             }
         }
 
         self.nodes = buf;
 
+        // Check if your tree is empty ! 
         if self.nodes.len() > 1 {
             println!("Compile tree...");
             let stream = ProcessNode::new(self.nodes[0].clone(), host).make::<f32>();
             return Some(stream);
         } else {
-            //println!("Empty tree ! No compile and continue...");
+            //Empty tree ! No compile and continue...
             return None;
         }
         

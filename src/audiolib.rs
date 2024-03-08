@@ -28,12 +28,14 @@ impl HostConfig {
     }
 }
 
+// Nodes type Enum
 #[derive(Clone)]
 pub enum Nodes {
     OscNode(Option<Oscillator>),
     ProcessNode
 }
 
+// Impl display for the "see" method
 impl fmt::Display for Nodes {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -58,6 +60,8 @@ impl ProcessNode {
         }
     }
 
+    // The Make method is the closest to CPAL 
+    // it runs a oscillator method in its core for now, so its not generic yet..
     pub fn make<'a, T> (&'a mut self) -> Stream
     where
         T: SizedSample + FromSample<f32>,
@@ -73,6 +77,7 @@ impl ProcessNode {
 
         let mut input_node = self.input_node.clone();
 
+        // This is where the magic happens !
         let stream = {
             host.device.build_output_stream(
             &host.config,
@@ -97,10 +102,6 @@ impl ProcessNode {
             None,
         ).unwrap()
     };
-
-        //thread sleep is used to hold artificially stream.play() in scope
-        //std::thread::sleep(std::time::Duration::from_millis(2000));   
-
     stream
     }
 }
