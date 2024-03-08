@@ -1,12 +1,10 @@
 use core::fmt;
-use std::marker;
 use std::sync::{Arc, Mutex};
 use cpal::{Device, Stream, StreamConfig};
 use cpal::{
     traits::{DeviceTrait, HostTrait},
     FromSample, SizedSample,
 };
-use cpal::{Sample, SampleRate};
 use crate::dsp::oscillators::*;
 
 pub struct HostConfig {
@@ -39,7 +37,7 @@ pub enum Nodes {
 impl fmt::Display for Nodes {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::OscNode(osc) => write!(f, "OscNode"),
+            Self::OscNode(_osc) => write!(f, "OscNode"),
             Self::ProcessNode => write!(f, "ProcessNode")
         }
     }

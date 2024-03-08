@@ -1,5 +1,4 @@
 use core::f32::consts::PI;
-use std::marker;
 use std::sync::mpsc::{Receiver, TryRecvError};
 use std::sync::{Arc, Mutex};
 use cpal::{Sample, SampleRate};
@@ -124,8 +123,6 @@ impl Oscillator {
         Message syntaxe :
         parameter-value
         */
-        let args: Vec<&str> = msg.trim().split('-').collect();
-
         let str_to_waveform = |arg: &str| match arg.to_lowercase().as_str() {
             "sine" => Waveform::Sine,
             "square" => Waveform::Square,
@@ -134,11 +131,16 @@ impl Oscillator {
             _ => Waveform::Sine
         };
 
-        match args[0] {
-            "oscfreq" => self.frequency_hz = args[1].parse::<f32>().unwrap(),
-            "osctype" => self.waveform = str_to_waveform(args[1]),
-            _ => ()
+        let command: Vec<&str> = msg.trim().split("&&").collect();
+
+        for arg in command {
+            let args: Vec<&str> = arg.trim().split('-').collect();
+            match args[0] {
+                "oscfreq" => self.frequency_hz = args[1].parse::<f32>().unwrap(),
+                "osctype" => self.waveform = str_to_waveform(args[1]),
+                _ => ()
         }
+    }
         
     }
 
