@@ -2,7 +2,9 @@ use std::{io, sync::{Arc, Mutex}};
 use std::sync::mpsc::Receiver;
 use cpal::Stream;
 use crate::audiolib::*;
+use std::collections::VecDeque;
 use crate::dsp::oscillators::*;
+use std::any::type_name;
 
 
 
@@ -67,6 +69,9 @@ impl NodeTree {
                 "oscnode" => {
                     self.nodes.push(Nodes::OscNode(None));
                 },
+                "modnode" => {
+                    self.nodes.push(Nodes::ModNode(None));
+                }
                 "processnode" => {
                     self.nodes.push(Nodes::ProcessNode);
                 },
@@ -92,21 +97,45 @@ impl NodeTree {
     // Compile your tree into a cpal::Stream, return a Option, to return None if your tree is empty
     pub fn compile (&mut self, host: Arc<Mutex<Option<HostConfig>>>, inbox: Arc<Mutex<Option<Receiver<String>>>> ) -> Option<Stream> {
 
-        let mut buf: Vec<Nodes> = vec![];
+        let mut tree: Vec<Nodes> = vec![];
 
-        // Supports here 2 types of Node
+        
+        // Supports here 3 types of Node
         for node in &self.nodes {
             match node {
                 Nodes::OscNode(osc) => match osc {
-                    Some(osc) => buf.push(Nodes::OscNode(Some(osc.clone()))),
-                    None => buf.push(Nodes::OscNode(Some(get_user_osc().context(host.clone(), inbox.clone()))))
+                    Some(osc) => tree.push(Nodes::OscNode(Some(osc.clone()))),
+                    None => tree.push(Nodes::OscNode(Some(get_user_osc().context(host.clone(), inbox.clone()))))
                 },
-                Nodes::ProcessNode => {buf.push(Nodes::ProcessNode); break;},
+                Nodes::ModNode(oscmod) => match oscmod {
+                    Some(oscmod) => tree.push(Nodes::ModNode(Some(oscmod.clone()))),
+                    None => tree.push(Nodes::ModNode(Some(todo!())))
+                },
+                Nodes::ProcessNode => {tree.push(Nodes::ProcessNode); break;},
                 _ => panic!("Invalid Node !!"), // No idea why this is unreachable..
             }
         }
-
-        self.nodes = buf;
+        
+        // reverse to parse from output to input
+        tree = tree.into_iter().rev().collect();
+        let mut tree = VecDeque::from_iter(tree);
+        // Assure there is a proccess node at the end
+        if let Nodes::ProcessNode = tree[0] {
+            // removes process node
+            tree.pop_front();
+            let tree = Vec::from_iter(tree);
+            let mut tree = tree.iter();
+            // if next is osc, end parsing, as osc cannot take another node as input, the chain stops
+            if let Some(Nodes::OscNode(osc)) = tree.next() {
+                todo!() //compile & process the osc node
+            }
+            if let Some(Nodes::ModNode(oscmod)) = tree.next() {
+                let oscs = tree.filter(|n| n == Nodes::OscNode(osc)).map(todo!(/*Unwrap oscillator */)).collect::<Vec<Oscillator>>();
+                match oscmod { Some( oscmod ) => oscmod.populate(oscs), _ => panic!("mod empty !!")};
+                todo!(/*process oscmod */)
+                
+            }
+        }
 
         // Check if your tree is empty ! 
         if self.nodes.len() > 1 {
