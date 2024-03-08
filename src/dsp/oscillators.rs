@@ -1,8 +1,11 @@
 use core::f32::consts::PI;
+use std::marker;
 use std::sync::mpsc::{Receiver, TryRecvError};
 use std::sync::{Arc, Mutex};
 use cpal::{Sample, SampleRate};
 use cpal::FromSample;
+use crate::audiolib::*;
+
 
 #[derive(Copy, Clone)]
 pub enum Waveform {
@@ -87,10 +90,15 @@ impl Oscillator {
         return self.next_sample();
     }
 
-    pub fn context (&self, sr: SampleRate, inbox : Option<Receiver<String>>) -> Self {
+    pub fn context (&self, host: Arc<Mutex<Option<HostConfig>>>, inbox: Arc<Mutex<Option<Receiver<String>>>>) -> Self {
+
+        let host = Arc::clone(&host);
+        let mut host = host.lock().unwrap();
+        let host = host.as_mut().unwrap();
+
         return Oscillator {
-            current_sample_rate : sr.0 as f32,
-            inbox : Arc::new(Mutex::new(inbox)),
+            current_sample_rate : host.config.sample_rate.0 as f32,
+            inbox : inbox,
             ..*self
         }
     }

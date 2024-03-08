@@ -1,79 +1,73 @@
-use std::{sync::{mpsc::channel, Arc, Mutex}, thread};
+use std::{collections::HashMap, process::{Command, Output}, sync::{mpsc::channel, Arc, Mutex, RwLock}, thread};
+use std::sync::mpsc::{Receiver, TryRecvError, SendError, TrySendError, Sender};
 pub mod audiolib;
 pub mod dsp;
 pub mod toolbox;
+use cpal::traits::StreamTrait;
+
 use crate::audiolib::*;
 use crate::dsp::oscillators::*;
 use crate::toolbox::*;
 
 fn main() {
+
+// Init message channel
+let (tx, rx) = channel();
+let tx = Arc::new(Mutex::new(tx));
+let rx = Arc::new(Mutex::new(rx));
+
+            // Audio //
+    let _audio_thread = thread::spawn(move || {
     // Init Host
     let mon_host = HostConfig::new();
     let mon_sample_rate = mon_host.config.sample_rate;
+    let mut tree = NodeTree::new();
+    let host = Arc::new(Mutex::new(Some(mon_host)));
+    println!("running audio...");
 
-    //let mon_oscillateur = SourceNode::OscNode(Oscillator::new(Waveform::Triangle, mon_sample_rate, rx, 440_f32, 1f32));
-    //let mut mon_stream = ProcessNode::new(mon_oscillateur, mon_host);
-    //let ma_sortie = mon_stream.make::<f32>();
-
-    let mut empty_tree = NodeTree::new();
-    let tree = Arc::new(Mutex::new(empty_tree));
-    let edit_tree = Arc::clone(&tree);
-    let process_tree = Arc::clone(&tree);
-
-    // User Interface Thread
-    let interface_thread = thread::spawn(move || {
-
+    let rx = Arc::clone(&rx);
+    let receive = rx.lock().unwrap();
         loop {
-            let mut tree = edit_tree.lock().unwrap();
-            let input = get_user_input();
-            get_user_command(input, &mut tree);
             
-        }  
-    });
-
-    // Audio Thread
-    let audio_thread = thread::spawn(move || {
-
-        // Init message channel
-       // let (tx, rx) = channel();
-        // Init Host
-        let mon_host = HostConfig::new();
-        let mon_sample_rate = mon_host.config.sample_rate;
-
-
-
-        loop {
-            let mut tree = process_tree.lock().unwrap();
-            let mut node1 = Oscillator::new_empty();
-            
-
-            for node in &mut tree {
-                match node {
-                    Nodes::OscNode(osc) => {
-                        node = Nodes::OscNode(node.context(mon_sample_rate, None));
-                    },
-                    Nodes::ProcessNode => {
-                        let stream = ProcessNode::new(node1, mon_host);
-                    },
-                    _ => panic!("Invalid Node !!")
-                }
+            //let command = &rx;
+            match receive.try_recv() {
+                Ok(msg) => get_user_command(msg, &mut tree),
+                Err(TryRecvError::Empty) => break,
+                Err(TryRecvError::Disconnected) => {panic!("Threads disconnected !!")},
             }
 
 
-
-
-
-            //ma_sortie.play().unwrap();
-            //let message = get_user_input();
-            //tx.send(message).unwrap();
+            let host = Arc::clone(&host);
+            let stream = tree.compile(host, Arc::new(Mutex::new(None)));
+            println!("Try streaming tree...");
+            stream.play().unwrap();
         }
+    }
+    );
 
-    });
 
-    interface_thread.join().unwrap();
-    audio_thread.join().unwrap();
-    
-    
+    // User Interface //
+    let _ui_thread = thread::spawn(move || {
+    let tx = Arc::clone(&tx);
+    let transmit = tx.lock().unwrap();
+        loop {
+            println!("Listening to user command...");
+            let msg = get_user_input();
+            //let msg = Arc::new(Mutex::new(msg));
+            transmit.send(msg).unwrap();
+        }
+    }
+    );
+
+
+    _ui_thread.join().unwrap();
+    _audio_thread.join().unwrap();
+
+
+//ma_sortie.play().unwrap();
+//let message = get_user_input();
+//tx.send(message).unwrap();
+
     
 }
 

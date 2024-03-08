@@ -1,7 +1,7 @@
-use std::{io, sync::{Arc, Mutex}};
+use std::{io, sync::{mpsc::channel, Arc, Mutex, RwLock}};
+use std::sync::mpsc::{Receiver, TryRecvError};
 use cpal::{
-    traits::{DeviceTrait, HostTrait}, FromSample, SampleRate, SizedSample
-};
+    traits::{DeviceTrait, HostTrait}, FromSample, SampleRate, SizedSample, Stream};
 use crate::audiolib::*;
 use crate::dsp::oscillators::*;
 
@@ -23,20 +23,18 @@ pub fn get_user_command (msg: String, tree: &mut NodeTree) {
     Destroy
     Edit Node
     */
-    println!("Tree building command :\n");
-
 
     //check command
     let args: Vec<&str> = msg.trim().split_whitespace().collect();
     match args[0].to_lowercase().as_str() {
-        "invoke" => tree.invoke_nodes(args[1]),
-        "see" => tree.see_nodes(),
+        "invoke" => if args.len() > 1 {tree.invoke(args[1])} else { panic!("No arguments !!")},
+        "see" => tree.see(),
         "destroy" => {},
-        _ => {},
+        _ => panic!("Invalid command !!"),
     };
 }
 
-fn get_user_osc () -> (Waveform, f32, f32) {
+pub fn get_user_osc () -> Oscillator {
     println!("Set parameter to invoke oscillator !\nType,Frequency,Amplitude");
     let input = get_user_input();
     let args: Vec<&str> = input.trim().split(',').collect();
@@ -49,10 +47,12 @@ fn get_user_osc () -> (Waveform, f32, f32) {
         _ => Waveform::Sine
     };
     let wavetype = str_to_waveform(args[0]);
-    let freq = args[2].parse::<f32>().unwrap();
-    let amp = args[3].parse::<f32>().unwrap();
+    let freq = args[1].parse::<f32>().unwrap();
+    let amp = args[2].parse::<f32>().unwrap();
 
-    return (wavetype, freq, amp);
+    let osc = Oscillator::new(wavetype, None, None, freq, amp);
+    println!("Parameters set !");
+    return osc;
 
 }
 
@@ -68,29 +68,51 @@ impl NodeTree {
         return NodeTree { nodes : vec![] };
     }
 
-    fn invoke_nodes (&mut self, nodes: &str, ) {
+    fn invoke (&mut self, nodes: &str) {
+        println!("Building your tree...");
+        self.nodes = vec![];
         let nodes: Vec<&str> = nodes.trim().split('>').collect();
 
         for node in nodes {
             match node {
                 "oscnode" => {
-                    let options = get_user_osc();
-                    self.nodes.push(Nodes::OscNode(Oscillator::new(options.0, None, None, options.1, options.2)));
+                    self.nodes.push(Nodes::OscNode(None));
                 },
                 "processnode" => {
                     self.nodes.push(Nodes::ProcessNode);
                 },
-                _ => {}
+                _ => panic!("Invalid Node !!")
             }
         }
     }
 
-    pub fn see_nodes (&self) {
+    pub fn see (&self) {
         let nodes = &self.nodes;
         for node in nodes {
-            println!("->");
-            println!("{}", node);
+            println!("->{}", node);
         }
+    }
+
+    pub fn compile (&mut self, host: Arc<Mutex<Option<HostConfig>>>, inbox: Arc<Mutex<Option<Receiver<String>>>> ) -> Stream {
+        println!("Compile tree...");
+
+        let mut buf: Vec<Nodes> = vec![];
+
+        for node in &self.nodes {
+            match node {
+                Nodes::OscNode(osc) => match osc {
+                    Some(osc) => buf.push(Nodes::OscNode(Some(osc.clone()))),
+                    None => buf.push(Nodes::OscNode(Some(get_user_osc().context(host.clone(), inbox.clone()))))
+                },
+                Nodes::ProcessNode => {buf.push(Nodes::ProcessNode); break;},
+                _ => panic!("Invalid Node !!"),
+            }
+        }
+
+        self.nodes = buf;
+
+        let stream = ProcessNode::new(self.nodes[0].clone(), host).make::<f32>();
+        stream
     }
 
 }

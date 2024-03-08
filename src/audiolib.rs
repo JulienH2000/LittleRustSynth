@@ -1,4 +1,5 @@
 use core::fmt;
+use std::marker;
 use std::sync::{Arc, Mutex};
 use cpal::{Device, Stream, StreamConfig};
 use cpal::{
@@ -23,15 +24,15 @@ impl HostConfig {
 
         // New Host Instance
         HostConfig {
-            device,
-            config
+            device: device,
+            config: config
         }
     }
 }
 
 #[derive(Clone)]
 pub enum Nodes {
-    OscNode(Oscillator),
+    OscNode(Option<Oscillator>),
     ProcessNode
 }
 
@@ -52,10 +53,10 @@ pub struct ProcessNode {
 
 impl ProcessNode {
 
-    pub fn new (source : Nodes, host: HostConfig) -> Self {
+    pub fn new (source : Nodes, host: Arc<Mutex<Option<HostConfig>>>) -> Self {
         return ProcessNode {
             input_node : source,
-            host : Arc::new(Mutex::new(Some(host)))
+            host : host
         }
     }
 
@@ -67,13 +68,13 @@ impl ProcessNode {
         let mut host = host.lock().unwrap();
         let host = host.as_mut().unwrap();
 
-
         // Extract some variables from Host Config
         let _sample_rate = host.config.sample_rate.0 as f32;
         let err_fn = |err| eprintln!("an error occurred on stream: {}", err);
         let channels = host.config.channels as usize;
 
         let mut input_node = self.input_node.clone();
+
         let stream = {
             host.device.build_output_stream(
             &host.config,
@@ -81,7 +82,10 @@ impl ProcessNode {
                 for frame in data.chunks_mut(channels) {
                     let value: T = T::from_sample(
                         match &mut input_node {
-                            Nodes::OscNode(osc) => osc.process::<T>(),
+                            Nodes::OscNode(osc) => match osc {
+                                Some(osc) => osc.process::<T>(),
+                                None => panic!("Oscillator Node Empty !!")
+                                },
                             _ => 0.0  
                         }
                     );
