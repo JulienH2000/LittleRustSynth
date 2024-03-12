@@ -77,7 +77,7 @@ impl Oscillator {
     }
 
 
-    // Ocsillator to buffer 
+    // Ocsillator processing
     pub fn process<'a, T>(&'a mut self) -> f32
     where
         T: Sample + FromSample<f32>,
@@ -94,6 +94,7 @@ impl Oscillator {
         return self.next_sample();
     }
 
+    // Push audio context to oscillator
     pub fn context (&self, host: Arc<Mutex<Option<HostConfig>>>, inbox: Arc<Mutex<Option<Receiver<String>>>>) -> Self {
 
         let host = Arc::clone(&host);

@@ -50,45 +50,8 @@ impl fmt::Display for Node {
     }
 }
 
-/*
-impl PartialOrd for Node {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        use std::cmp::Ordering;
-        match (*self, *other) {
-            (Node::ProcessNode, Node::ProcessNode) => Some(Ordering::Equal),
-            (Node::ProcessNode, _) => Some(Ordering::Less),
-            (_, Node::ProcessNode) => Some(Ordering::Greater),
-            (Node::ModNode(_), Node::ModNode(_)) => Some(Ordering::Equal),
-            (Node::ModNode(_), Node::OscNode(_)) => Some(Ordering::Less),
-            (Node::OscNode(_), Node::ModNode(_)) => Some(Ordering::Greater),
-            (Node::OscNode(_), Node::OscNode(_)) => Some(Ordering::Equal),
-        }
-    }
-}
-
-impl PartialEq for Node {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Node::ProcessNode, Node::ProcessNode) => true,
-            (Node::OscNode(_), Node::OscNode(_)) => true,
-            (Node::ModNode(_), Node::ModNode(_)) => true,
-            _ => false,
-        }
-    }
-}
-
-impl Eq for Node {}
-*/
-
-impl Node {
-    pub fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
-
-
 pub struct ProcessNode {
-    input_node : Option<Node>,
+    pub input_node : Option<Node>,
     host : Arc<Mutex<Option<HostConfig>>>
 }
 
@@ -148,13 +111,14 @@ impl ProcessNode {
     }
 }
 
+// Route input 
 impl Routable for ProcessNode {
     fn route (&mut self, input: Node) {
         self.input_node = Some(input);
     }
 }
 
-
+// This trait allows the route_node method to be generic accros nodes types
 pub trait Routable {
     fn route (&mut self, node: Node);
 }

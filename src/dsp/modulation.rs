@@ -37,13 +37,16 @@ impl OscModulator {
         if self.oscs.len() == 0 {
             panic!("Node oscillators!");
         }
-
+        
         let inbox = Arc::clone(&self.inbox);
         let mut inbox = inbox.lock().unwrap();
-        match inbox.as_mut().unwrap().try_recv() {
-            Ok(msg) => self.check_inbox(msg),
-            Err(TryRecvError::Empty) => {},
-            Err(TryRecvError::Disconnected) => {panic!("inbox Disconnected !!")},
+        match inbox.as_mut() {
+            Some(inbox) => match inbox.try_recv() {
+                Ok(msg) => self.check_inbox(msg),
+                Err(TryRecvError::Empty) => {},
+                Err(TryRecvError::Disconnected) => {panic!("inbox Disconnected !!")},
+            },
+            None => {}
         }
 
         let mut buffer: f32 = 0.0;
