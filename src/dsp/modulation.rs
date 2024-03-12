@@ -11,6 +11,7 @@ use cpal::{
 
 #[derive(Clone)]
 pub struct OscModulator {
+    pub label: String,
     pub oscs: Vec<Oscillator>,
     pub inbox : Arc::<Mutex<Option<Receiver<String>>>>,
     pub mod_index : f32
@@ -18,9 +19,10 @@ pub struct OscModulator {
 
 impl OscModulator {
 
-    pub fn new (inbox: Option<Receiver<String>>, mod_index: f32) -> OscModulator {
+    pub fn new (label: String, inbox: Option<Receiver<String>>, mod_index: f32) -> OscModulator {
 
         return OscModulator {
+            label : label,
             oscs : vec![],
             inbox : Arc::new(Mutex::new(inbox)),
             mod_index : mod_index
@@ -69,8 +71,15 @@ impl OscModulator {
         }
     }
 
-    pub fn populate (&mut self, oscs: Vec<Oscillator>) {
-        self.oscs = oscs;
-    }
 
+}
+
+impl Routable for OscModulator {
+    fn route (&mut self, node: Node) {
+        let osc = match node {
+            Node::OscNode(osc) => osc,
+            _ => panic!()
+        };
+        self.oscs.push(osc);
+    }
 }

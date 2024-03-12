@@ -8,6 +8,7 @@ use cpal::{
 };
 use crate::dsp::oscillators::*;
 use crate::dsp::modulation::*;
+use std::any::Any;
 
 pub struct HostConfig {
     pub device: Device,
@@ -30,16 +31,16 @@ impl HostConfig {
     }
 }
 
-// Nodes type Enum
+// Node type Enum
 #[derive(Clone)]
-pub enum Nodes {
-    OscNode(Option<Oscillator>),
-    ModNode(Option<OscModulator>),
+pub enum Node {
+    OscNode(Oscillator),
+    ModNode(OscModulator),
     ProcessNode,
 }
 
 // Impl display for the "see" method
-impl fmt::Display for Nodes {
+impl fmt::Display for Node {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::OscNode(_osc) => write!(f, "OscNode"),
@@ -49,15 +50,51 @@ impl fmt::Display for Nodes {
     }
 }
 
+/*
+impl PartialOrd for Node {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        use std::cmp::Ordering;
+        match (*self, *other) {
+            (Node::ProcessNode, Node::ProcessNode) => Some(Ordering::Equal),
+            (Node::ProcessNode, _) => Some(Ordering::Less),
+            (_, Node::ProcessNode) => Some(Ordering::Greater),
+            (Node::ModNode(_), Node::ModNode(_)) => Some(Ordering::Equal),
+            (Node::ModNode(_), Node::OscNode(_)) => Some(Ordering::Less),
+            (Node::OscNode(_), Node::ModNode(_)) => Some(Ordering::Greater),
+            (Node::OscNode(_), Node::OscNode(_)) => Some(Ordering::Equal),
+        }
+    }
+}
+
+impl PartialEq for Node {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Node::ProcessNode, Node::ProcessNode) => true,
+            (Node::OscNode(_), Node::OscNode(_)) => true,
+            (Node::ModNode(_), Node::ModNode(_)) => true,
+            _ => false,
+        }
+    }
+}
+
+impl Eq for Node {}
+*/
+
+impl Node {
+    pub fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
 
 pub struct ProcessNode {
-    input_node : Nodes,
+    input_node : Option<Node>,
     host : Arc<Mutex<Option<HostConfig>>>
 }
 
 impl ProcessNode {
 
-    pub fn new (source : Nodes, host: Arc<Mutex<Option<HostConfig>>>) -> Self {
+    pub fn new (source : Option<Node>, host: Arc<Mutex<Option<HostConfig>>>) -> Self {
         return ProcessNode {
             input_node : source,
             host : host
@@ -89,15 +126,12 @@ impl ProcessNode {
                 for frame in data.chunks_mut(channels) {
                     let value: T = T::from_sample(
                         match &mut input_node {
-                            Nodes::OscNode(osc) => match osc {
-                                Some(osc) => osc.process::<T>(),
-                                None => panic!("Oscillator Node Empty !!")
-                                },
-                            Nodes::ModNode(oscmod) => match oscmod {
-                                Some(oscmod) => oscmod.process::<T>(),
-                                None => panic!("Modulator Node Empty !!")
-                                }
-                            _ => 0.0  
+                            Some(node) => match node {
+                                Node::OscNode(osc) => osc.process::<T>(),
+                                Node::ModNode(oscmod) => oscmod.process::<T>(),
+                                _ => 0.0  
+                            },
+                            None => 0.0
                         }
                     );
                     for sample in frame.iter_mut() {
@@ -112,4 +146,15 @@ impl ProcessNode {
     };
     stream
     }
+}
+
+impl Routable for ProcessNode {
+    fn route (&mut self, input: Node) {
+        self.input_node = Some(input);
+    }
+}
+
+
+pub trait Routable {
+    fn route (&mut self, node: Node);
 }

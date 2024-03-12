@@ -54,7 +54,7 @@ let mut stream_vec: Vec<Stream> = vec![];
                 None => continue
             }
         } 
-        // Running the Stram ! Keep it in scope !
+        // Running the Stream ! Keep it in scope !
         stream_vec[0].play().unwrap();
         }
 });
@@ -82,7 +82,7 @@ loop {
     }
 
 // Default OSC parameters, while the parameters send is WIP
-let msg = "osctype-sine&&oscfreq-440".to_string();
+let msg = "".to_string();
 
 
 // Send Tree to audio thread
