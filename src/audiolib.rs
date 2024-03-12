@@ -1,4 +1,5 @@
 use core::fmt;
+use std::fmt::write;
 use std::sync::{Arc, Mutex};
 use cpal::{Device, Stream, StreamConfig};
 use cpal::{
@@ -6,6 +7,8 @@ use cpal::{
     FromSample, SizedSample,
 };
 use crate::dsp::oscillators::*;
+use crate::dsp::modulation::*;
+use std::any::Any;
 
 pub struct HostConfig {
     pub device: Device,
@@ -28,32 +31,33 @@ impl HostConfig {
     }
 }
 
-// Nodes type Enum
+// Node type Enum
 #[derive(Clone)]
-pub enum Nodes {
-    OscNode(Option<Oscillator>),
-    ProcessNode
+pub enum Node {
+    OscNode(Oscillator),
+    ModNode(OscModulator),
+    ProcessNode,
 }
 
 // Impl display for the "see" method
-impl fmt::Display for Nodes {
+impl fmt::Display for Node {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::OscNode(_osc) => write!(f, "OscNode"),
-            Self::ProcessNode => write!(f, "ProcessNode")
+            Self::ModNode(_mod) => write!(f, "ModNode"),
+            Self::ProcessNode => write!(f, "ProcessNode"),
         }
     }
 }
 
-
 pub struct ProcessNode {
-    input_node : Nodes,
+    pub input_node : Option<Node>,
     host : Arc<Mutex<Option<HostConfig>>>
 }
 
 impl ProcessNode {
 
-    pub fn new (source : Nodes, host: Arc<Mutex<Option<HostConfig>>>) -> Self {
+    pub fn new (source : Option<Node>, host: Arc<Mutex<Option<HostConfig>>>) -> Self {
         return ProcessNode {
             input_node : source,
             host : host
@@ -61,7 +65,7 @@ impl ProcessNode {
     }
 
     // The Make method is the closest to CPAL 
-    // it runs a oscillator method in its core for now, so its not generic yet..
+    // it runs a oscillator method in its core for now, but the match expression makes it generic
     pub fn make<'a, T> (&'a mut self) -> Stream
     where
         T: SizedSample + FromSample<f32>,
@@ -85,11 +89,12 @@ impl ProcessNode {
                 for frame in data.chunks_mut(channels) {
                     let value: T = T::from_sample(
                         match &mut input_node {
-                            Nodes::OscNode(osc) => match osc {
-                                Some(osc) => osc.process::<T>(),
-                                None => panic!("Oscillator Node Empty !!")
-                                },
-                            _ => 0.0  
+                            Some(node) => match node {
+                                Node::OscNode(osc) => osc.process::<T>(),
+                                Node::ModNode(oscmod) => oscmod.process::<T>(),
+                                _ => 0.0  
+                            },
+                            None => 0.0
                         }
                     );
                     for sample in frame.iter_mut() {
@@ -104,4 +109,16 @@ impl ProcessNode {
     };
     stream
     }
+}
+
+// Route input 
+impl Routable for ProcessNode {
+    fn route (&mut self, input: Node) {
+        self.input_node = Some(input);
+    }
+}
+
+// This trait allows the route_node method to be generic accros nodes types
+pub trait Routable {
+    fn route (&mut self, node: Node);
 }

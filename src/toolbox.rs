@@ -1,12 +1,12 @@
+use core::panic;
 use std::{io, sync::{Arc, Mutex}};
 use std::sync::mpsc::Receiver;
 use cpal::Stream;
-use crate::audiolib::*;
+use crate::{audiolib::*, dsp::modulation::OscModulator};
 use crate::dsp::oscillators::*;
+use std::collections::BTreeMap;
 
-
-
-//simple user input reading
+// simple user input reading
 pub fn get_user_input() -> String {
     let mut user_input = String::new();
             io::stdin()
@@ -15,31 +15,91 @@ pub fn get_user_input() -> String {
     user_input
 }
 
-//User command interpreter
+// User command interpreter
 pub fn get_user_command (msg: String, tree: &mut NodeTree) {
     /*
     Syntaxe :
-    Invoke Node1>Node2>Node3>.... !Working
+    add > Node "node" / Route "source>dest"
+    remove > Node / Route
     See !Working
     Destroy !Not Working
     Edit Node !todo
     */
 
     //check command
-    let args: Vec<&str> = msg.trim().split_whitespace().collect();
-    match args[0].to_lowercase().as_str() {
-        "invoke" => if args.len() > 1 {tree.invoke(args[1])} else { panic!("No arguments !!")},
+    let (cmd, arg) = msg.trim().split_once(' ').unwrap();
+    match cmd.to_lowercase().as_str() {
+        "add" => if cmd.len() > 1 {tree.add(arg)} else { panic!("No arguments !!")},
+        "remove" => todo!(), //if cmd.len() > 1 {tree.remove(arg)} else { panic!("No arguments !!")},
         "see" => tree.see(),
         "destroy" => tree.destroy(),
-        _ => panic!("Invalid command !! : {}", args[0]),
+        _ => panic!("Invalid command !! : {}", cmd),
     };
 }
 
-//Currently Osc::new, future use
+// Spawn new user-defined oscillator
 pub fn get_user_osc () -> Oscillator {
-    let osc = Oscillator::new_empty();
-    println!("oscillator set !");
-    return osc;
+    // label,type,freq,amp
+    println!("define new oscillator :");
+    let uip = get_user_input();
+    let vec_uip = uip.trim().split(',').collect::<Vec<&str>>();
+    if vec_uip.len() == 4 {
+        let label: String = vec_uip[0].to_string();
+        let wave: Waveform = match vec_uip[1].to_lowercase().as_str() {
+            "sine" => Waveform::Sine,
+            "square" => Waveform::Square,
+            "saw" => Waveform::Saw,
+            "triangle" => Waveform::Triangle,
+            _ => panic!("Unresolved Waveform !!")
+        };
+        let freq: f32 = vec_uip[2].parse().unwrap();
+        let amp: f32 = vec_uip[3].parse().unwrap();
+
+        let osc = Oscillator::new(label, wave, None, None, freq, amp);
+
+        return osc
+
+    } else {
+        panic!("unresolved arguments !!");
+    }
+
+}
+
+// Spawn new user-defined modulator
+pub fn get_user_mod () -> OscModulator {
+    // label, index
+    println!("define new modulator :");
+    let uip = get_user_input();
+    let vec_uip = uip.trim().split(',').collect::<Vec<&str>>();
+    if vec_uip.len() == 2 {
+        let label = vec_uip[0].to_string();
+        let mod_index = vec_uip[1].parse::<f32>().unwrap();
+
+        let oscmod = OscModulator::new(label, None, mod_index);
+        return oscmod
+
+    } else {
+        panic!("unresolved arguments !!");
+    }
+    
+
+}
+
+#[derive(Clone)]
+pub struct Route {
+    pub source : String,
+    pub destination : String,
+}
+
+// Route contains a list of input-output crosspoints, as label strings couple
+impl Route {
+
+    pub fn new (source: &str, destination: &str) -> Route {
+        Route {
+            source: source.to_string(),
+            destination: destination.to_string()
+        }
+    }
 
 }
 
@@ -47,35 +107,55 @@ pub fn get_user_osc () -> Oscillator {
 //struct to fill with your nodes
 #[derive(Clone)]
 pub struct NodeTree {
-   pub  nodes : Vec<Nodes>
+   pub nodes : Vec<Node>,
+   pub routes : Vec<Route>
 }
 
 impl NodeTree {
 
     pub fn new () -> NodeTree {
-        return NodeTree { nodes : vec![] };
+        return NodeTree { nodes : vec![], routes: vec![] };
     }
 
-    // Gets your message, translate your nodes to Nodes enum type, fills a NodeTree instance
-    fn invoke (&mut self, nodes: &str) {
-        println!("Building your tree...");
-        self.nodes = vec![];
-        let nodes: Vec<&str> = nodes.trim().split('>').collect();
-
-        for node in nodes {
-            match node {
-                "oscnode" => {
-                    self.nodes.push(Nodes::OscNode(None));
-                },
-                "processnode" => {
-                    self.nodes.push(Nodes::ProcessNode);
-                },
-                _ => panic!("Invalid Node !!")
-            }
+    fn add (&mut self, msg: &str) {
+        let (cmd, arg) = msg.trim().split_once(' ').unwrap();
+        match cmd.to_lowercase().as_str() {
+            "route" => self.new_route(arg),
+            "node" => self.new_node(arg),
+            _ => panic!("Unresolved \"add\" argument "),
         }
+
     }
 
-    // Just display a NodeTree, in order
+    fn new_node (&mut self, msg: &str) {
+        let node = msg.trim();
+        match node.to_lowercase().as_str() {
+            "oscnode" => {
+                self.nodes.push(Node::OscNode(get_user_osc()));
+            },
+            "modnode" => {
+                self.nodes.push(Node::ModNode(get_user_mod()));
+            },
+            "processnode" => {
+                if self.nodes.iter().filter(|n| if let Node::ProcessNode = n {return true} else {return false}).count() == 0 {
+                    self.nodes.push(Node::ProcessNode);
+                } else {
+                    panic!("Only one ProcessNode can be suumoned in a tree !!")
+                }
+
+            },
+            _ => panic!("Unresolved Node type !!")
+        }
+
+    }
+
+    fn new_route (&mut self, msg: &str) {
+        let (source, destination) = msg.trim().split_once('>').unwrap();
+        self.routes.push(Route::new(source, destination));
+
+    }
+
+    // Just display a NodeTree, in order, NOT WORKING
     pub fn see (&self) {
         let nodes = &self.nodes;
         for node in nodes {
@@ -90,35 +170,66 @@ impl NodeTree {
     }
 
     // Compile your tree into a cpal::Stream, return a Option, to return None if your tree is empty
+    // Cool things happening here..
     pub fn compile (&mut self, host: Arc<Mutex<Option<HostConfig>>>, inbox: Arc<Mutex<Option<Receiver<String>>>> ) -> Option<Stream> {
 
-        let mut buf: Vec<Nodes> = vec![];
-
-        // Supports here 2 types of Node
+        // Generate Node table, with label fetching capacity
+        // Push audio context if needed
+        let mut node_table: BTreeMap<String, Node> = BTreeMap::new();
         for node in &self.nodes {
             match node {
-                Nodes::OscNode(osc) => match osc {
-                    Some(osc) => buf.push(Nodes::OscNode(Some(osc.clone()))),
-                    None => buf.push(Nodes::OscNode(Some(get_user_osc().context(host.clone(), inbox.clone()))))
-                },
-                Nodes::ProcessNode => {buf.push(Nodes::ProcessNode); break;},
-                _ => panic!("Invalid Node !!"), // No idea why this is unreachable..
+                Node::OscNode(osc) => {node_table.insert(osc.label.to_owned(), Node::OscNode(osc.context(host.clone(), inbox.clone())));},
+                Node::ModNode(oscmod) => {node_table.insert(oscmod.label.to_owned(), Node::ModNode(oscmod.clone()));},
+                Node::ProcessNode => {node_table.insert("Default_PN".to_string(), Node::ProcessNode);}
             }
         }
 
-        self.nodes = buf;
+        // The Default, Unique, ProcessNode, empty
+        // Must me added by user ! 
+        let mut process_node = ProcessNode::new(None, host);
 
-        // Check if your tree is empty ! 
-        if self.nodes.len() > 1 {
-            println!("Compile tree...");
-            let stream = ProcessNode::new(self.nodes[0].clone(), host).make::<f32>();
+        // Route parsing
+        // Parse each route, fetch the node in the node base by label, and route the source into the destination
+        for route in &self.routes {
+            let src: Node;
+            let dst: &mut Node;
+            {
+                src = match node_table.get(&route.source) {
+                    Some(src) => src.clone(),
+                    None => panic!(),
+                };
+            }
+            {
+                dst = match node_table.get_mut(&route.destination) {
+                    Some(dst) => dst,
+                    None => panic!(),
+                };  
+            }
+            match dst {
+                Node::OscNode(_osc) => panic!(),
+                Node::ModNode(oscmod) => route_node(src, oscmod),
+                Node::ProcessNode => route_node(src, &mut process_node),
+                _ => panic!()
+            }
+            
+        }
+        // if a node has been routed into the ProcessNode, Run the audio !!
+        if let Some(_) = process_node.input_node  {
+            println!("c'est parti !");
+            let stream = process_node.make::<f32>();
             return Some(stream);
         } else {
-            //Empty tree ! No compile and continue...
             return None;
         }
         
-
     }
 
+}
+
+// Generic for all Nodes
+pub fn route_node<T> (source: Node, dest: &mut T) 
+where
+    T: Routable,
+    {
+    dest.route(source);
 }

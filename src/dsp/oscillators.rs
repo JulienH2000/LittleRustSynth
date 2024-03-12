@@ -16,6 +16,7 @@ pub enum Waveform {
 
 #[derive(Clone)]
 pub struct Oscillator {
+    pub label: String,
     pub waveform: Waveform,
     pub current_sample_index: f32,
     pub last_sample: f32,
@@ -29,7 +30,8 @@ pub struct Oscillator {
 }
 
 impl Oscillator {
-    pub fn new (wave: Waveform, 
+    pub fn new (label: String,
+                wave: Waveform, 
                 sample_rate: Option<SampleRate>, 
                 inbox: Option<Receiver<String>>, 
                 freq: f32, 
@@ -44,6 +46,7 @@ impl Oscillator {
             None => Arc::new(Mutex::new(None))
         };
         return Oscillator {
+            label: label,
             waveform: wave,
             current_sample_index: 0f32,
             last_sample: 0f32,
@@ -59,6 +62,7 @@ impl Oscillator {
 
     pub fn new_empty () -> Oscillator {
         return Oscillator {
+            label: "Default_label".to_string(),
             waveform: Waveform::Sine,
             current_sample_index: 0f32,
             last_sample: 0f32,
@@ -72,7 +76,8 @@ impl Oscillator {
         }
     }
 
-    // Ocsillator to buffer 
+
+    // Ocsillator processing
     pub fn process<'a, T>(&'a mut self) -> f32
     where
         T: Sample + FromSample<f32>,
@@ -89,6 +94,7 @@ impl Oscillator {
         return self.next_sample();
     }
 
+    // Push audio context to oscillator
     pub fn context (&self, host: Arc<Mutex<Option<HostConfig>>>, inbox: Arc<Mutex<Option<Receiver<String>>>>) -> Self {
 
         let host = Arc::clone(&host);
@@ -98,6 +104,7 @@ impl Oscillator {
         return Oscillator {
             current_sample_rate : host.config.sample_rate.0 as f32,
             inbox : inbox,
+            label : self.label.clone(),
             ..*self
         }
     }
