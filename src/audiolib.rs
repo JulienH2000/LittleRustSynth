@@ -8,7 +8,6 @@ use cpal::{
 };
 use crate::dsp::oscillators::*;
 use crate::dsp::modulation::*;
-use std::any::Any;
 
 pub struct HostConfig {
     pub device: Device,
@@ -36,32 +35,27 @@ impl HostConfig {
 pub enum Node {
     OscNode(Oscillator),
     ModNode(OscModulator),
-    ProcessNode,
+    ProcessNode(ProcessNode),
 }
 
-// Impl display for the "see" method
-impl fmt::Display for Node {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::OscNode(_osc) => write!(f, "OscNode"),
-            Self::ModNode(_mod) => write!(f, "ModNode"),
-            Self::ProcessNode => write!(f, "ProcessNode"),
-        }
-    }
-}
-
+#[derive(Clone)]
 pub struct ProcessNode {
-    pub input_node : Option<Node>,
-    host : Arc<Mutex<Option<HostConfig>>>
+    pub input_node : Option<Arc<Mutex<Node>>>,
+    host : Option<Arc<Mutex<HostConfig>>>
 }
 
 impl ProcessNode {
 
-    pub fn new (source : Option<Node>, host: Arc<Mutex<Option<HostConfig>>>) -> Self {
+    pub fn new (source : Option<Arc<Mutex<Node>>>, host: Option<Arc<Mutex<HostConfig>>>) -> Self {
         return ProcessNode {
             input_node : source,
             host : host
         }
+    }
+
+    // Push audio context to process node
+    pub fn context (&mut self, host: Arc<Mutex<HostConfig>>) {
+        self.host = Some(host);
     }
 
     // The Make method is the closest to CPAL 
@@ -70,31 +64,34 @@ impl ProcessNode {
     where
         T: SizedSample + FromSample<f32>,
     {
-        let host = Arc::clone(&self.host);
+        let host = self.host.as_mut().unwrap();
+        let host = Arc::clone(&host);
         let mut host = host.lock().unwrap();
-        let host = host.as_mut().unwrap();
+        //let host = host.as_mut().unwrap();
 
         // Extract some variables from Host Config
         let _sample_rate = host.config.sample_rate.0 as f32;
         let err_fn = |err| eprintln!("an error occurred on stream: {}", err);
         let channels = host.config.channels as usize;
 
-        let mut input_node = self.input_node.clone();
+        //let mut input_node = self.input_node.clone();
+        //let mut input_node = *input_node;
+        
+        let input_node = Arc::clone(&self.input_node.as_mut().unwrap());
 
         // This is where the magic happens !
         let stream = {
             host.device.build_output_stream(
             &host.config,
             move |data: &mut [T], _: &cpal::OutputCallbackInfo| {
+    
                 for frame in data.chunks_mut(channels) {
+                    let mut input_node = input_node.lock().unwrap();
                     let value: T = T::from_sample(
-                        match &mut input_node {
-                            Some(node) => match node {
+                        match &mut *input_node {
                                 Node::OscNode(osc) => osc.process::<T>(),
                                 Node::ModNode(oscmod) => oscmod.process::<T>(),
                                 _ => 0.0  
-                            },
-                            None => 0.0
                         }
                     );
                     for sample in frame.iter_mut() {
@@ -113,12 +110,12 @@ impl ProcessNode {
 
 // Route input 
 impl Routable for ProcessNode {
-    fn route (&mut self, input: Node) {
+    fn route (&mut self, input: Arc<Mutex<Node>>) {
         self.input_node = Some(input);
     }
 }
 
 // This trait allows the route_node method to be generic accros nodes types
 pub trait Routable {
-    fn route (&mut self, node: Node);
+    fn route (&mut self, node: Arc<Mutex<Node>>);
 }

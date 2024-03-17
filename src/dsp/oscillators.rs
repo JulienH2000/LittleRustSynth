@@ -1,5 +1,5 @@
 use core::f32::consts::PI;
-use std::sync::mpsc::{Receiver, TryRecvError};
+use std::sync::mpsc::{Receiver};
 use std::sync::{Arc, Mutex};
 use cpal::{Sample, SampleRate};
 use cpal::FromSample;
@@ -24,7 +24,6 @@ pub struct Oscillator {
     pub amplitude: f32,
     pub phase_shift: f32,
     pub current_sample_rate: f32,
-    pub inbox : Arc::<Mutex<Option<Receiver<String>>>>,
     pub phase : f32,
     pub phase_incr : f32
 }
@@ -33,17 +32,12 @@ impl Oscillator {
     pub fn new (label: String,
                 wave: Waveform, 
                 sample_rate: Option<SampleRate>, 
-                inbox: Option<Receiver<String>>, 
                 freq: f32, 
                 amp: f32
                 ) -> Oscillator {
         let sample_rate = match sample_rate {
             Some(sr) => sr.0 as f32 ,
             None => 48000_f32
-        };
-        let inbox = match inbox {
-            Some(ibx) => Arc::new(Mutex::new(Some(ibx))),
-            None => Arc::new(Mutex::new(None))
         };
         return Oscillator {
             label: label,
@@ -54,7 +48,6 @@ impl Oscillator {
             amplitude: amp,
             phase_shift: 1f32,
             current_sample_rate: sample_rate,
-            inbox : inbox,
             phase : 0.0,
             phase_incr: 0.0
         }
@@ -70,7 +63,6 @@ impl Oscillator {
             amplitude: 0.0,
             phase_shift: 1f32,
             current_sample_rate: 44100.0,
-            inbox : Arc::new(Mutex::new(None)),
             phase : 0.0,
             phase_incr: 0.0
         }
@@ -83,27 +75,18 @@ impl Oscillator {
         T: Sample + FromSample<f32>,
     {
         self.update_increment();
-        // ça c'est de la method de fumeur de mauvais shit 
-        let inbox = Arc::clone(&self.inbox);
-        let mut inbox = inbox.lock().unwrap();
-        match inbox.as_mut().unwrap().try_recv() {
-            Ok(msg) => self.check_inbox(msg),
-            Err(TryRecvError::Empty) => {},
-            Err(TryRecvError::Disconnected) => {panic!("inbox Disconnected !!")},
-        }
         return self.next_sample();
     }
 
     // Push audio context to oscillator
-    pub fn context (&self, host: Arc<Mutex<Option<HostConfig>>>, inbox: Arc<Mutex<Option<Receiver<String>>>>) -> Self {
+    pub fn context (&self, host: Arc<Mutex<HostConfig>>) -> Self {
 
         let host = Arc::clone(&host);
         let mut host = host.lock().unwrap();
-        let host = host.as_mut().unwrap();
+        //let host = host.as_mut().unwrap();
 
         return Oscillator {
             current_sample_rate : host.config.sample_rate.0 as f32,
-            inbox : inbox,
             label : self.label.clone(),
             ..*self
         }
