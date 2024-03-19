@@ -1,10 +1,6 @@
-use crate::dsp::oscillators::*;
 use crate::audiolib::*;
-use crate::toolbox::*;
 use std::sync::{Arc, Mutex};
-use std::sync::mpsc::{Receiver, TryRecvError};
 use cpal::{
-    traits::{DeviceTrait, HostTrait},
     FromSample, SizedSample,
 };
 
@@ -51,23 +47,6 @@ impl OscModulator {
         }
         return buffer;
     }
-
-    fn check_inbox (&mut self, msg: String) {
-        /*
-        Message syntaxe :
-        parameter-value
-        */
-        let command: Vec<&str> = msg.trim().split("&&").collect();
-
-        for arg in command {
-            let args: Vec<&str> = arg.trim().split('-').collect();
-            match args[0] {
-                "modindex" => self.mod_index = args[1].parse::<f32>().unwrap(),
-                _ => ()
-            }
-        }
-    }
-
 
 }
 

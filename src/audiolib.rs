@@ -1,5 +1,3 @@
-use core::fmt;
-use std::fmt::write;
 use std::sync::{Arc, Mutex};
 use cpal::{Device, Stream, StreamConfig};
 use cpal::{
@@ -66,7 +64,7 @@ impl ProcessNode {
     {
         let host = self.host.as_mut().unwrap();
         let host = Arc::clone(&host);
-        let mut host = host.lock().unwrap();
+        let host = host.lock().unwrap();
         //let host = host.as_mut().unwrap();
 
         // Extract some variables from Host Config

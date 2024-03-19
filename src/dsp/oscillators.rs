@@ -1,5 +1,4 @@
 use core::f32::consts::PI;
-use std::sync::mpsc::{Receiver};
 use std::sync::{Arc, Mutex};
 use cpal::{Sample, SampleRate};
 use cpal::FromSample;
@@ -82,7 +81,7 @@ impl Oscillator {
     pub fn context (&self, host: Arc<Mutex<HostConfig>>) -> Self {
 
         let host = Arc::clone(&host);
-        let mut host = host.lock().unwrap();
+        let host = host.lock().unwrap();
         //let host = host.as_mut().unwrap();
 
         return Oscillator {
@@ -106,32 +105,6 @@ impl Oscillator {
         }
 
         return output;
-    }
-
-    fn check_inbox (&mut self, msg: String) {
-        /*
-        Message syntaxe :
-        parameter-value
-        */
-        let str_to_waveform = |arg: &str| match arg.to_lowercase().as_str() {
-            "sine" => Waveform::Sine,
-            "square" => Waveform::Square,
-            "saw" => Waveform::Saw,
-            "triangle" => Waveform::Triangle,
-            _ => Waveform::Sine
-        };
-
-        let command: Vec<&str> = msg.trim().split("&&").collect();
-
-        for arg in command {
-            let args: Vec<&str> = arg.trim().split('-').collect();
-            match args[0] {
-                "oscfreq" => self.frequency_hz = args[1].parse::<f32>().unwrap(),
-                "osctype" => self.waveform = str_to_waveform(args[1]),
-                _ => ()
-        }
-    }
-        
     }
 
     fn next_index (&mut self) {
