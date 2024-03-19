@@ -1,0 +1,6 @@
+(osc "osc1" "sine" 440 1) 
+(osc "osc2" "square" 670 1)
+(mod "mod1" 0.6)
+(route "osc1" "mod1")
+(route "osc2" "mod1")
+(route "mod1" "process") 
