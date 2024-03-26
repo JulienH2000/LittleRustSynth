@@ -2,7 +2,7 @@ use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use rust_lisp::model::{Env, RuntimeError, Value};
 
-use crate::{TREE, RECOMPILE_FLAG};
+use crate::{midi, RECOMPILE_FLAG, TREE};
 use crate::dsp::oscillators::Waveform;
 
 //pub type NativeFunc = fn(env: Rc<RefCell<Env>>, args: Vec<Value>) -> Result<Value, RuntimeError>;
@@ -161,3 +161,21 @@ pub fn lisp_clear_process (_env: Rc<RefCell<Env>>, _args: Vec<Value>) -> Result<
 
     return Ok(Value::String("Process cleared !".to_string()));
 }
+
+pub fn lisp_midi_ports (_env: Rc<RefCell<Env>>, _args: Vec<Value>) -> Result<Value, RuntimeError> {
+    let ports = midi::display_inputs().unwrap();
+
+    return Ok(Value::String(ports));
+}
+
+/*
+pub fn lisp_midi_open (_env: Rc<RefCell<Env>>, _args: Vec<Value>) -> Result<Value, RuntimeError> {
+    
+    let device = midi::MidiModule::new(0 as usize).unwrap();
+    let _conn = device.listen().unwrap();
+    
+    
+
+    return Ok(Value::True);
+}
+*/

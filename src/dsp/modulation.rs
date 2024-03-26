@@ -23,7 +23,18 @@ impl OscModulator {
         }
     }
 
-    pub fn process<T> (&mut self) -> f32 
+
+}
+
+impl Routable for OscModulator {
+    fn route (&mut self, node: Arc<Mutex<Node>>) {
+        self.oscs.push(node);
+
+    }
+}
+
+impl Processable for OscModulator {
+    fn process<T> (&mut self) -> f32 
     where
         T: SizedSample + FromSample<f32>,
     {
@@ -46,13 +57,5 @@ impl OscModulator {
             buffer += osc.process::<T>();
         }
         return buffer;
-    }
-
-}
-
-impl Routable for OscModulator {
-    fn route (&mut self, node: Arc<Mutex<Node>>) {
-        self.oscs.push(node);
-
     }
 }
