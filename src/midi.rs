@@ -11,7 +11,7 @@ pub struct MidiModule {
 
 impl MidiModule {
     
-    pub fn new (input_index: usize) -> Result<MidiModule, Box<dyn Error>> {
+    pub fn new (input_index: usize) -> Result<MidiModule, syerr::MidiError> {
 
         let mut midi_in = MidiInput::new("New Module Input")?;
         midi_in.ignore(Ignore::None);
@@ -19,14 +19,17 @@ impl MidiModule {
 
         //let user_input = input_index.trim().parse::<usize>()?;
 
-        let port = in_ports.get(input_index).ok_or("input invalid")?;
+        let port = match in_ports.get(input_index).ok_or("input invalid") {
+            Ok(p) => p,
+            Err(_) => return Err(MidiError::new("Unresolved Input Index")),
+        };
 
         return Ok(MidiModule { midi_input: midi_in, midi_port: port.clone() });
         
     }
 
 
-    pub fn listen (self, tx: Arc<Mutex<Sender<MidiMessage>>>) -> Result<(), Box<dyn Error>> {
+    pub fn listen (self, tx: Arc<Mutex<Sender<MidiMessage>>>) -> Result<(), syerr::MidiError> {
 
 
         let port_name = &self.midi_input.port_name(&self.midi_port)?;
@@ -40,7 +43,7 @@ impl MidiModule {
             let _conn_in = self.midi_input.connect(
                 &self.midi_port,
                 "LRS-midi-listen",
-                move |stamp, message, data| {
+                move |_stamp, message, data| {
                     /*
                     print!("\n{} (len = {}) : ", stamp, message.len());
                     for byte in message  {
@@ -61,24 +64,26 @@ impl MidiModule {
 
 }
 
-pub fn display_inputs() -> Result<String, Box<dyn Error>> {
+pub fn display_inputs() -> Result<Vec<usize>, syerr::MidiError> {
     let mut midi_in = MidiInput::new("reading input")?;
     midi_in.ignore(Ignore::None);
 
     let mut output_string = String::new();
+    let mut indexes = vec![];
 
     let in_ports = midi_in.ports();
     match in_ports.len() {
-        0 => return Err("no input port found".into()),
+        0 => return Err(MidiError::new("No Input Port Found !")),
         _ => {
             println!("\nAvailable input ports:");
             for (i, p) in in_ports.iter().enumerate() {
                 output_string = format!("[{}]:{}\n", i, midi_in.port_name(p)?);
+                indexes.push(i);
             }
         }
     };
     println!("{}", output_string);
-    Ok(output_string)
+    Ok(indexes)
 
 }
 

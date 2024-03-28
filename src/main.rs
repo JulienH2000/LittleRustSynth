@@ -25,15 +25,22 @@ lazy_static!{
 
 fn main() -> Result<(), Box<dyn Error>> {
 
-{
-// Midi listenning init
-let _ = midi::display_inputs()?;
 println!("Choose midi input (by index):");
+loop {
+// Midi listenning init
+let indexes = midi::display_inputs()?;
 let user_usize = toolbox::get_user_input();
 let user_usize = user_usize.trim().parse::<usize>()?;
-let midi_master_index = Arc::clone(&MIDI_MASTER_INDEX);
-let mut midi_master_index = midi_master_index.lock().unwrap();
-*midi_master_index = Some(user_usize);
+
+if indexes.iter().filter(|u| *u == &user_usize).count() == 0 {
+    println!("Unresolved Index !");
+    continue;
+} else {
+    let midi_master_index = Arc::clone(&MIDI_MASTER_INDEX);
+    let mut midi_master_index = midi_master_index.lock().unwrap();
+    *midi_master_index = Some(user_usize);
+    break;
+}
 }
 
 let (midi_tx, midi_rx) = channel::<midi::MidiMessage>();
@@ -41,9 +48,7 @@ let (midi_tx, midi_rx) = channel::<midi::MidiMessage>();
 let t_midi_tx = Arc::new(Mutex::new(midi_tx));
 let t_midi_rx = Arc::new(Mutex::new(midi_rx));
 
-let _midi_thread = thread::spawn(
-    
-    move || {
+let _midi_thread = thread::spawn( move || {
         let mut index: Option<usize> = None;
         let mut midi_master: Option<midi::MidiModule> = None;
             let midi_master_index = Arc::clone(&MIDI_MASTER_INDEX);
@@ -61,7 +66,10 @@ let _midi_thread = thread::spawn(
                 },
                 None => {
                     if let Some(i) = index {
-                        midi_master = Some(midi::MidiModule::new(i).unwrap());
+                        midi_master = match midi::MidiModule::new(i) {
+                            Ok(module) => Some(module),
+                            Err(_) => panic!()
+                        };
                     }
                 },
             }

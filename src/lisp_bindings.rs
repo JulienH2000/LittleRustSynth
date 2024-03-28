@@ -163,9 +163,9 @@ pub fn lisp_clear_process (_env: Rc<RefCell<Env>>, _args: Vec<Value>) -> Result<
 }
 
 pub fn lisp_midi_ports (_env: Rc<RefCell<Env>>, _args: Vec<Value>) -> Result<Value, RuntimeError> {
-    let ports = midi::display_inputs().unwrap();
+    let _ports = midi::display_inputs().unwrap();
 
-    return Ok(Value::String(ports));
+    return Ok(Value::True);
 }
 
 /*
