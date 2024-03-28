@@ -6,6 +6,8 @@ use cpal::{
 };
 use crate::dsp::oscillators::*;
 use crate::dsp::modulation::*;
+use crate::dsp::env::*;
+use crate::midi;
 
 pub struct HostConfig {
     pub device: Device,
@@ -29,11 +31,13 @@ impl HostConfig {
 }
 
 // Node type Enum
-#[derive(Clone)]
+//#[derive(Clone)]
 pub enum Node {
     OscNode(Oscillator),
     ModNode(OscModulator),
     ProcessNode(ProcessNode),
+    EnvNode(Env),
+    MidiNode(midi::MidiModule)
 }
 
 #[derive(Clone)]
@@ -116,4 +120,10 @@ impl Routable for ProcessNode {
 // This trait allows the route_node method to be generic accros nodes types
 pub trait Routable {
     fn route (&mut self, node: Arc<Mutex<Node>>);
+}
+
+pub trait Processable {
+    fn process<T> (&mut self) -> f32
+    where
+        T: SizedSample + FromSample<f32>;
 }

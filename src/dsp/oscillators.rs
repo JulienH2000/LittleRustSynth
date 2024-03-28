@@ -1,8 +1,11 @@
 use core::f32::consts::PI;
+use core::panic;
+use std::sync::mpsc::{Receiver, TryRecvError};
 use std::sync::{Arc, Mutex};
 use cpal::{Sample, SampleRate};
 use cpal::FromSample;
-use crate::audiolib::*;
+use crate::audiolib::{self, *};
+use crate::midi::{self, MidiMessage};
 
 
 #[derive(Copy, Clone)]
@@ -19,12 +22,14 @@ pub struct Oscillator {
     pub waveform: Waveform,
     pub current_sample_index: f32,
     pub last_sample: f32,
+    pub base_freq: f32,
     pub frequency_hz: f32,
     pub amplitude: f32,
     pub phase_shift: f32,
     pub current_sample_rate: f32,
     pub phase : f32,
-    pub phase_incr : f32
+    pub phase_incr : f32,
+    pub midi_vc: Option<Arc<Mutex<Receiver<MidiMessage>>>>
 }
 
 impl Oscillator {
@@ -43,12 +48,14 @@ impl Oscillator {
             waveform: wave,
             current_sample_index: 0f32,
             last_sample: 0f32,
+            base_freq: freq,
             frequency_hz: freq,
             amplitude: amp,
             phase_shift: 1f32,
             current_sample_rate: sample_rate,
             phase : 0.0,
-            phase_incr: 0.0
+            phase_incr: 0.0,
+            midi_vc: None
         }
     }
 
@@ -58,40 +65,50 @@ impl Oscillator {
             waveform: Waveform::Sine,
             current_sample_index: 0f32,
             last_sample: 0f32,
+            base_freq: 440.0,
             frequency_hz: 440.0,
             amplitude: 0.0,
             phase_shift: 1f32,
             current_sample_rate: 44100.0,
             phase : 0.0,
-            phase_incr: 0.0
+            phase_incr: 0.0,
+            midi_vc: None
         }
     }
 
-
-    // Ocsillator processing
-    pub fn process<'a, T>(&'a mut self) -> f32
-    where
-        T: Sample + FromSample<f32>,
-    {
-        self.update_increment();
-        return self.next_sample();
-    }
-
     // Push audio context to oscillator
-    pub fn context (&self, host: Arc<Mutex<HostConfig>>) -> Self {
+    pub fn context (&mut self, host: Arc<Mutex<HostConfig>>) {
 
         let host = Arc::clone(&host);
         let host = host.lock().unwrap();
         //let host = host.as_mut().unwrap();
 
-        return Oscillator {
-            current_sample_rate : host.config.sample_rate.0 as f32,
-            label : self.label.clone(),
-            ..*self
-        }
+        self.current_sample_rate = host.config.sample_rate.0 as f32
     }
 
+    pub fn midi_control (&mut self, midi: Arc<Mutex<Receiver<MidiMessage>>>) {
+        self.midi_vc = Some(midi)
+    }
+
+
     pub fn next_sample(&mut self) -> f32 {
+
+        if let Some(m) = &self.midi_vc {
+            let m = Arc::clone(&m);
+            let m = m.lock().unwrap();
+            match m.try_recv() {
+                Ok(msg) => {
+                    self.frequency_hz = (self.base_freq + midi::MidiMessage::to_freq(msg).unwrap()) / 2.0;
+                },
+                Err(TryRecvError::Empty) => {} ,
+                Err(TryRecvError::Disconnected) => {panic!("midi message channel Disconnected !!")},
+            }
+
+            //println!("{}", self.frequency_hz);
+        }
+
+        
+
         let output = match self.waveform {
             Waveform::Sine => self.sine_wave(),
             Waveform::Square => self.square_wave(),
@@ -201,5 +218,16 @@ impl Oscillator {
         self.last_sample = output;
 
         output
+    }
+}
+
+impl Processable for Oscillator {
+    // Ocsillator processing
+    fn process<'a, T>(&'a mut self) -> f32
+    where
+        T: Sample + FromSample<f32>,
+    {
+        self.update_increment();
+        return self.next_sample();
     }
 }

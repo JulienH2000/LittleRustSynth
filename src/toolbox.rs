@@ -1,7 +1,7 @@
 use core::panic;
-use std::{io, sync::{Arc, Mutex}};
+use std::{io, sync::{mpsc::Receiver, Arc, Mutex}};
 use cpal::Stream;
-use crate::{audiolib::*, dsp::modulation::OscModulator};
+use crate::{audiolib::*, dsp::modulation::OscModulator, midi::MidiMessage};
 use crate::dsp::oscillators::*;
 use std::collections::BTreeMap;
 
@@ -13,25 +13,6 @@ pub fn get_user_input() -> String {
                 .expect("failed");
     user_input
 }
-
-#[derive(Clone)]
-pub struct Route {
-    pub source : String,
-    pub destination : String,
-}
-
-// Route contains a list of input-output crosspoints, as label strings couple
-impl Route {
-
-    pub fn new (source: &str, destination: &str) -> Route {
-        Route {
-            source: source.to_string(),
-            destination: destination.to_string()
-        }
-    }
-
-}
-
 
 //struct to fill with your nodes
 #[derive(Clone)]
@@ -77,10 +58,9 @@ impl NodeTree {
         //let inner_dest = Arc::clone(&dest);
         let mut inner_dest = dest.lock().unwrap();
         match &mut *inner_dest {
-            Node::OscNode(_osc) => panic!(),
             Node::ModNode(oscmod) => route_node(src.clone(), oscmod),
             Node::ProcessNode(process) => route_node(src.clone(), process),
-            //_ => panic!()
+            _ => panic!()
         }
     }
 
@@ -96,14 +76,19 @@ impl NodeTree {
         process_node.input_node = None;
     }
 
-    pub fn compile (&mut self, host: Arc<Mutex<HostConfig>>) -> Option<Stream> {
+    pub fn compile (&mut self, host: Arc<Mutex<HostConfig>>, midi: Arc<Mutex<Receiver<MidiMessage>>>) -> Option<Stream> {
+
         for (_label, node) in self.nodes.iter() {
             let node_clone = Arc::clone(&node);
             let mut node_clone = node_clone.lock().unwrap();
             match &mut *node_clone {
-                Node::OscNode(osc) => {osc.context(host.clone());},
+                Node::OscNode(osc) => {
+                    osc.context(host.clone());
+                    osc.midi_control(midi.clone());
+                },
                 Node::ModNode(_oscmod) => {},
                 Node::ProcessNode(process) => {process.context(host.clone());}
+                _ => panic!()
             }
         }
 
@@ -122,23 +107,6 @@ impl NodeTree {
             return None;
         }
     }
-
-    /*
-    // Just display a NodeTree, in order, NOT WORKING
-    pub fn see (&self) {
-        let nodes = &self.nodes;
-        for node in nodes {
-            println!("->{}", node);
-        }
-    }
-
-    // Destroy your tree, 
-    // not working due to compile ignoring empty tree if a previous working stream exists
-    pub fn destroy (&mut self) {
-        *self = NodeTree::new();
-    }
-    */
-
 }
 
 // Generic for all Nodes
